@@ -608,6 +608,33 @@ body.nav-compact .hamburger{display:flex;}
    Purple (#a78bfa) is the AI color, distinct from enrichment green/blue
    ══════════════════════════════════════════════════════════════════════════ */
 
+/* ── Hero AI Settings button ─────────────────────────────────────────────── */
+.hstatus-ai-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .8px;
+  padding: 4px 12px;
+  min-height: 26px;
+  background: rgba(167,139,250,.15);
+  border: 1px solid rgba(167,139,250,.6);
+  color: #c4b5fd;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: background .15s, border-color .15s, color .15s, box-shadow .15s;
+  box-shadow: 0 0 8px rgba(167,139,250,.15);
+  white-space: nowrap;
+}
+.hstatus-ai-btn:hover {
+  background: rgba(167,139,250,.25);
+  border-color: #a78bfa;
+  color: #ede9fe;
+  box-shadow: 0 0 12px rgba(167,139,250,.3);
+}
+
 /* ── AI button in results table ─────────────────────────────────────────── */
 .btn-ai {
   font-family: var(--mono);
