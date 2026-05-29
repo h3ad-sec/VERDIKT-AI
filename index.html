@@ -314,6 +314,14 @@
             VERDIKT-AI RESULTS
           </div>
           <div class="results-meta" id="results-meta"></div>
+          <button class="btn btn-ai-settings" onclick="openAISettings()" title="Configure AI providers &amp; API keys">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="2" stroke="currentColor" stroke-width="1.2"/><path d="M6 1v1.5M6 9.5V11M11 6H9.5M2.5 6H1M9.2 2.8l-1.1 1.1M3.9 8.1l-1.1 1.1M9.2 9.2l-1.1-1.1M3.9 3.9l-1.1-1.1" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+            AI SETTINGS
+          </button>
+          <button class="btn btn-analyze-all" onclick="analyzeAll()" title="AI-analyze all completed IOCs">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="5" stroke="currentColor" stroke-width="1.2"/><path d="M4 6l1.5 1.5L8 4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            ANALYZE ALL
+          </button>
           <button class="btn btn-export" onclick="openExportModal()" title="Export results">
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
               <path d="M6 1v7M3 5l3 3 3-3M1 9v2h10V9" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
@@ -355,12 +363,16 @@
                 <th class="col-ha" style="color:var(--ha)">HA</th>
                 <th class="col-icopy"></th>
                 <th class="col-idetail">DETAIL</th>
+                <th class="col-ai" style="color:#a78bfa">AI</th>
               </tr>
             </thead>
             <tbody id="results-body"></tbody>
           </table>
         </div>
       </section>
+
+      <!-- AI Batch Panel -->
+      <div id="ai-batch-panel" style="display:none;margin-top:16px"></div>
 
       <section class="panel" id="ipintel-panel" style="display:none">
         <div class="panel-header-static">
@@ -456,6 +468,93 @@
     </div>
   </div>
 
+  <!-- AI Settings / BYOK Modal -->
+  <div class="modal-overlay" id="ai-settings-modal" onclick="closeAISettings(event)">
+    <div class="modal ai-settings-modal-inner" onclick="event.stopPropagation()" style="max-width:500px">
+      <div class="modal-header">
+        <div class="modal-title" style="color:#a78bfa">
+          <svg width="13" height="13" viewBox="0 0 12 12" fill="none" style="margin-right:6px;vertical-align:middle"><circle cx="6" cy="6" r="2" stroke="#a78bfa" stroke-width="1.2"/><path d="M6 1v1.5M6 9.5V11M11 6H9.5M2.5 6H1M9.2 2.8l-1.1 1.1M3.9 8.1l-1.1 1.1M9.2 9.2l-1.1-1.1M3.9 3.9l-1.1-1.1" stroke="#a78bfa" stroke-width="1.2" stroke-linecap="round"/></svg>
+          AI SETTINGS — BYOK
+        </div>
+        <button class="modal-close" onclick="closeAISettings()">✕</button>
+      </div>
+      <div class="modal-body" style="padding:20px 24px 24px">
+
+        <!-- Active provider selector -->
+        <div class="byok-section">
+          <div class="byok-section-label">ACTIVE PROVIDER</div>
+          <div class="byok-prov-pills">
+            <button class="byok-prov-pill active" data-prov="groq"   onclick="selectAIProv('groq',this)"   style="--pc:#f97316">GROQ</button>
+            <button class="byok-prov-pill"         data-prov="claude" onclick="selectAIProv('claude',this)" style="--pc:#d97706">CLAUDE</button>
+            <button class="byok-prov-pill"         data-prov="openai" onclick="selectAIProv('openai',this)" style="--pc:#10a37f">OPENAI</button>
+            <button class="byok-prov-pill"         data-prov="gemini" onclick="selectAIProv('gemini',this)" style="--pc:#4285f4">GEMINI</button>
+          </div>
+          <div class="byok-note">Keys are stored in your browser only — never sent to any server.</div>
+        </div>
+
+        <!-- Key inputs -->
+        <div class="byok-keys">
+          <!-- Groq -->
+          <div class="byok-row">
+            <div class="byok-row-header">
+              <span class="byok-row-name" style="color:#f97316">GROQ</span>
+              <span class="byok-row-hint">llama-3.3-70b · free tier generous</span>
+            </div>
+            <div class="byok-input-wrap">
+              <input id="byok-inp-groq"   type="password" class="byok-input" placeholder="gsk_…" autocomplete="off" spellcheck="false">
+              <button id="byok-show-groq"   class="byok-show-btn" onclick="toggleByokKey('groq')">SHOW</button>
+              <button class="byok-save-btn" onclick="saveAIKey('groq')">SAVE</button>
+              <button class="byok-clr-btn"  onclick="clearAIKey('groq')">✕</button>
+            </div>
+          </div>
+          <!-- Claude -->
+          <div class="byok-row">
+            <div class="byok-row-header">
+              <span class="byok-row-name" style="color:#d97706">CLAUDE</span>
+              <span class="byok-row-hint">claude-haiku-4-5 · fast + accurate</span>
+            </div>
+            <div class="byok-input-wrap">
+              <input id="byok-inp-claude"   type="password" class="byok-input" placeholder="sk-ant-…" autocomplete="off" spellcheck="false">
+              <button id="byok-show-claude"   class="byok-show-btn" onclick="toggleByokKey('claude')">SHOW</button>
+              <button class="byok-save-btn" onclick="saveAIKey('claude')">SAVE</button>
+              <button class="byok-clr-btn"  onclick="clearAIKey('claude')">✕</button>
+            </div>
+          </div>
+          <!-- OpenAI -->
+          <div class="byok-row">
+            <div class="byok-row-header">
+              <span class="byok-row-name" style="color:#10a37f">OPENAI</span>
+              <span class="byok-row-hint">gpt-4o-mini · balanced</span>
+            </div>
+            <div class="byok-input-wrap">
+              <input id="byok-inp-openai"   type="password" class="byok-input" placeholder="sk-…" autocomplete="off" spellcheck="false">
+              <button id="byok-show-openai"   class="byok-show-btn" onclick="toggleByokKey('openai')">SHOW</button>
+              <button class="byok-save-btn" onclick="saveAIKey('openai')">SAVE</button>
+              <button class="byok-clr-btn"  onclick="clearAIKey('openai')">✕</button>
+            </div>
+          </div>
+          <!-- Gemini -->
+          <div class="byok-row">
+            <div class="byok-row-header">
+              <span class="byok-row-name" style="color:#4285f4">GEMINI</span>
+              <span class="byok-row-hint">gemini-2.0-flash · free tier</span>
+            </div>
+            <div class="byok-input-wrap">
+              <input id="byok-inp-gemini"   type="password" class="byok-input" placeholder="AIza…" autocomplete="off" spellcheck="false">
+              <button id="byok-show-gemini"   class="byok-show-btn" onclick="toggleByokKey('gemini')">SHOW</button>
+              <button class="byok-save-btn" onclick="saveAIKey('gemini')">SAVE</button>
+              <button class="byok-clr-btn"  onclick="clearAIKey('gemini')">✕</button>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex;justify-content:flex-end;margin-top:18px">
+          <button class="btn btn-secondary" onclick="closeAISettings()">CLOSE</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-overlay" id="modal-overlay" onclick="closeModal()">
     <div class="modal" onclick="event.stopPropagation()">
       <div class="modal-header">
@@ -469,11 +568,12 @@
 
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
   <script src="js/ioc-parser.js?v=20260514"></script>
-  <script src="js/api.js?v=20260510"></script>
-  <script src="js/scanner.js?v=20260514b"></script>
-  <script src="js/ui.js?v=20260511"></script>
+  <script src="js/api.js?v=20260529"></script>
+  <script src="js/scanner.js?v=20260529"></script>
+  <script src="js/ui.js?v=20260529"></script>
   <script src="js/export.js?v=20260509"></script>
   <script src="js/app.js?v=20260514"></script>
+  <script src="js/ai.js?v=20260529"></script>
 
   <script>
     /* ── NAV ──────────────────────────────────────────────────────────────────── */

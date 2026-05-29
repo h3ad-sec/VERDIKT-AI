@@ -81,6 +81,7 @@ function buildRow(entry, i) {
     <td id="ha-${i}">${isHash         ? buildIntelCell('ha', ha, done)      : na}</td>
     <td id="copy-${i}">${done ? `<button class="btn-ii-copy" onclick="copyStdRow(${i})" title="Copy as key-value">⎘</button>` : ''}</td>
     <td>${done ? `<button class="btn-detail" onclick="openModal(${i})">DETAIL</button>` : '<span class="src-loading">…</span>'}</td>
+    <td id="ai-btn-${i}">${done ? `<button class="btn-ai" onclick="toggleAIPanel(${i})" title="AI analysis">AI</button>` : ''}</td>
   </tr>`;
 }
 
@@ -156,6 +157,7 @@ function updateRow(i, entry) {
   set('uh',   isURL          ? buildIntelCell('uh', urlhaus, true)  : na);
   set('ha',   isHash         ? buildIntelCell('ha', ha, true)       : na);
   set('copy', `<button class="btn-ii-copy" onclick="copyStdRow(${i})" title="Copy as key-value">⎘</button>`);
+  set('ai-btn', `<button class="btn-ai" onclick="toggleAIPanel(${i})" title="AI analysis">AI</button>`);
 
   const row = document.querySelector(`tr[data-row="${i}"]`);
   if (row) {
@@ -166,7 +168,7 @@ function updateRow(i, entry) {
 }
 
 function updateRowLoading(i) {
-  ['vt','ab','us','mb','otx','tf','uh','ha'].forEach(src => {
+  ['vt','ab','us','mb','otx','tf','uh','ha','ai-btn'].forEach(src => {
     const el = document.getElementById(`${src}-${i}`);
     if (el) el.innerHTML = '<span class="src-loading">…</span>';
   });
@@ -193,13 +195,17 @@ function filterByType(t, btn) {
 function searchResults(val) { currentSearch = val.toLowerCase().trim(); applyFilters(); }
 
 function applyFilters() {
-  document.querySelectorAll('#results-body tr').forEach(row => {
+  document.querySelectorAll('#results-body tr[data-row]').forEach(row => {
     const tp  = row.dataset.type || '';
     const ioc = (row.dataset.ioc || '').toLowerCase();
     const matchT = currentTypeFilter === 'all' || tp === currentTypeFilter
                    || (currentTypeFilter === 'hash' && tp.startsWith('hash_'));
     const matchS = !currentSearch || ioc.includes(currentSearch);
-    row.classList.toggle('hidden', !(matchT && matchS));
+    const hide = !(matchT && matchS);
+    row.classList.toggle('hidden', hide);
+    // Keep AI panel row in sync with its data row
+    const panelRow = document.getElementById(`ai-panel-row-${row.dataset.row}`);
+    if (panelRow && hide) panelRow.style.display = 'none';
   });
 }
 
