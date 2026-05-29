@@ -1,7 +1,7 @@
 
 const SERVER_BASE = (() => {
   const isStatic = ['github.io','netlify.app','pages.dev'].some(h => location.hostname.endsWith(h));
-  return isStatic ? 'https://x-verdikt.vercel.app' : '';
+  return isStatic ? 'https://verdikt-ai-olive.vercel.app' : '';
 })();
 
 function vtUrlId(url) {
