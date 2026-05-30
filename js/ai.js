@@ -120,39 +120,44 @@ function buildAIPrompt(entry) {
   if (ha && !ha.skipped && !ha.error && !ha.notFound)
     lines.push(`HybridAnalysis: ${ha.count} sandbox hit${ha.count!==1?'s':''}${ha.verdict ? `, verdict: ${ha.verdict}` : ''}${ha.maxScore ? `, threat score: ${ha.maxScore}/100` : ''}${ha.families?.length ? ` — ${ha.families.slice(0,2).join(', ')}` : ''}`);
 
-  return `You are a senior threat intelligence analyst writing a formal security verdict for a SOC investigation. Analyze the IOC and return ONLY a valid JSON object.
+  const noData = !lines.length;
 
-Required JSON structure:
+  return `You are a SOC analyst writing a triage verdict. Return ONLY a valid JSON object.
+
+JSON structure:
 {
-  "narrative": "<professional security verdict — see format below>",
-  "mitre": [{"id": "T1234.001", "name": "Sub-Technique Name", "tactic": "Tactic Name"}],
+  "narrative": "<3 sentences — see exact format below>",
+  "mitre": [{"id": "T1234.001", "name": "Technique Name", "tactic": "Tactic"}],
   "queries": {
-    "kql": "// Microsoft Sentinel / Defender XDR\\n<runnable KQL using the exact IOC>",
-    "spl": "<runnable Splunk SPL using the exact IOC>",
-    "sigma": "<Sigma YAML rule using the exact IOC>",
-    "xql": "<Cortex XDR / XSIAM XQL using the exact IOC>"
+    "kql": "<KQL for Sentinel/Defender>",
+    "spl": "<Splunk SPL>",
+    "sigma": "<Sigma YAML>",
+    "xql": "<Cortex XDR XQL>"
   }
 }
 
-NARRATIVE FORMAT — write exactly 3 sentences in this order:
-1. VERDICT sentence: "VERDICT: [MALICIOUS|SUSPICIOUS|BENIGN|UNKNOWN] — [one-line classification of what this IOC is and its threat category]"
-2. EVIDENCE sentence: Cite the specific numbers and signals from enrichment data (e.g. "VT flagged X/Y engines, AbuseIPDB reports Z% confidence with N abuse reports, ThreatFox lists N C2 IOCs linked to [family]..."). If clean, cite the clean signals.
-3. ACTION sentence: "Recommendation: [specific analyst action — e.g. Block at perimeter firewall and SIEM, pivot on ASN X / Investigate lateral movement / No action required — benign infrastructure]."
+NARRATIVE — 3 sentences, no more:
+S1: "VERDICT: [MALICIOUS|SUSPICIOUS|BENIGN|UNKNOWN] — [what this IOC is, one clause]"
+S2: [What the data shows — only numbers and facts from the enrichment below, nothing invented]
+S3: "Recommendation: [single concrete action]"
 
-Example of good narrative:
-"VERDICT: MALICIOUS — High-confidence C2 server associated with Emotet botnet infrastructure. VT detects this IP across 18/92 engines, AbuseIPDB reports 91% abuse confidence with 3,412 reports, and ThreatFox identifies 4 C2 IOCs with 100% confidence linked to Emotet and TrickBot. Recommendation: Block at perimeter firewall immediately, add to SIEM blocklist, and hunt for lateral movement from any host that contacted this IP."
+WRITING RULES — follow all of these:
+- Only use what is in the enrichment data. If a source shows nothing, do not mention it.
+- No invented context, no assumed attribution, no guessed malware families unless explicitly named in the data.
+- No filler: never write "It is worth noting", "importantly", "in the current threat landscape", "sophisticated", "robust", "comprehensive", "leveraging", "delve", "significant", "concerning".
+- No over-qualification: no "may", "could potentially", "it appears that", "seems to suggest".
+- No dramatization of clean IOCs. If all sources return clean, verdict is BENIGN and say so plainly.
+- Short sentences. Active voice. Analyst tone — like a triage note, not a report.
+- Numbers must match the enrichment data exactly. No rounding up.
+
+BAD (never write like this): "This IP exhibits concerning characteristics and may potentially be leveraging sophisticated techniques associated with advanced threat actors, as evidenced by multiple intelligence sources flagging this infrastructure."
+GOOD (write like this): "VERDICT: MALICIOUS — C2 node linked to Qbot. VT: 14/92 engines, AbuseIPDB: 88% (2,341 reports), ThreatFox: 2 C2 IOCs at 100% confidence. Recommendation: Block at firewall, alert on any internal host that reached this IP."
 
 IOC: ${ioc.value}
 Type: ${ioc.label}
+${noData ? '\nNo enrichment data returned — base verdict on IOC type only, mark UNKNOWN.' : `\nEnrichment data:\n${lines.join('\n')}`}
 
-${lines.length ? `Enrichment data:\n${lines.join('\n')}` : 'No enrichment data available — base analysis on IOC type and known reputation only.'}
-
-Rules:
-- Narrative MUST use the exact format above — 3 sentences, VERDICT: prefix on first, Recommendation: prefix on third
-- Cite actual numbers from enrichment data, not generic descriptions
-- queries: use "${ioc.value}" literally in every query — never use placeholder text
-- xql: Cortex XDR / XSIAM XQL syntax
-- Return ONLY the JSON object. Nothing else.`;
+Return ONLY the JSON. No markdown. No explanation outside the JSON.`;
 }
 
 /* ── Call provider ───────────────────────────────────────────────────────── */
