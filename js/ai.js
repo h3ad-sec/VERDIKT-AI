@@ -120,31 +120,37 @@ function buildAIPrompt(entry) {
   if (ha && !ha.skipped && !ha.error && !ha.notFound)
     lines.push(`HybridAnalysis: ${ha.count} sandbox hit${ha.count!==1?'s':''}${ha.verdict ? `, verdict: ${ha.verdict}` : ''}${ha.maxScore ? `, threat score: ${ha.maxScore}/100` : ''}${ha.families?.length ? ` — ${ha.families.slice(0,2).join(', ')}` : ''}`);
 
-  return `You are a senior threat intelligence analyst with expertise in SOC operations and incident response. Analyze this IOC and return ONLY a valid JSON object — no markdown fences, no explanation before or after.
+  return `You are a senior threat intelligence analyst writing a formal security verdict for a SOC investigation. Analyze the IOC and return ONLY a valid JSON object.
 
-Required JSON structure (return exactly this, no extra fields):
+Required JSON structure:
 {
-  "narrative": "2-3 sentence analyst assessment — state what the IOC IS, what specific threat signals were found in the enrichment data, and the recommended action (block / investigate / monitor / allow)",
-  "mitre": [
-    {"id": "T1234.001", "name": "Sub-Technique Name", "tactic": "Tactic Name"}
-  ],
+  "narrative": "<professional security verdict — see format below>",
+  "mitre": [{"id": "T1234.001", "name": "Sub-Technique Name", "tactic": "Tactic Name"}],
   "queries": {
-    "kql": "// Microsoft Sentinel / Defender XDR\\nDeviceNetworkEvents\\n| where RemoteIP == \\"${ioc.value}\\"",
-    "spl": "index=* dest_ip=\\"${ioc.value}\\"",
-    "sigma": "title: Detect Activity for ${ioc.value}\\nstatus: experimental\\nlogsource:\\n  category: network_connection\\ndetection:\\n  selection:\\n    dst_ip: '${ioc.value}'\\n  condition: selection",
-    "xql": "dataset = xdr_data\\n| filter dst_ip = \\"${ioc.value}\\""
+    "kql": "// Microsoft Sentinel / Defender XDR\\n<runnable KQL using the exact IOC>",
+    "spl": "<runnable Splunk SPL using the exact IOC>",
+    "sigma": "<Sigma YAML rule using the exact IOC>",
+    "xql": "<Cortex XDR / XSIAM XQL using the exact IOC>"
   }
 }
+
+NARRATIVE FORMAT — write exactly 3 sentences in this order:
+1. VERDICT sentence: "VERDICT: [MALICIOUS|SUSPICIOUS|BENIGN|UNKNOWN] — [one-line classification of what this IOC is and its threat category]"
+2. EVIDENCE sentence: Cite the specific numbers and signals from enrichment data (e.g. "VT flagged X/Y engines, AbuseIPDB reports Z% confidence with N abuse reports, ThreatFox lists N C2 IOCs linked to [family]..."). If clean, cite the clean signals.
+3. ACTION sentence: "Recommendation: [specific analyst action — e.g. Block at perimeter firewall and SIEM, pivot on ASN X / Investigate lateral movement / No action required — benign infrastructure]."
+
+Example of good narrative:
+"VERDICT: MALICIOUS — High-confidence C2 server associated with Emotet botnet infrastructure. VT detects this IP across 18/92 engines, AbuseIPDB reports 91% abuse confidence with 3,412 reports, and ThreatFox identifies 4 C2 IOCs with 100% confidence linked to Emotet and TrickBot. Recommendation: Block at perimeter firewall immediately, add to SIEM blocklist, and hunt for lateral movement from any host that contacted this IP."
 
 IOC: ${ioc.value}
 Type: ${ioc.label}
 
-${lines.length ? `Enrichment data:\n${lines.join('\n')}` : 'No enrichment data available — base analysis on IOC type only.'}
+${lines.length ? `Enrichment data:\n${lines.join('\n')}` : 'No enrichment data available — base analysis on IOC type and known reputation only.'}
 
 Rules:
-- narrative: MUST reference specific data from the enrichment results above (e.g. mention VT detection count, AbuseIPDB %, OTX pulse names, ThreatFox family). Do not write generic text.
-- mitre: 1-4 most relevant techniques derived from the enrichment signals
-- queries: use the exact IOC value "${ioc.value}" in every query — no placeholders
+- Narrative MUST use the exact format above — 3 sentences, VERDICT: prefix on first, Recommendation: prefix on third
+- Cite actual numbers from enrichment data, not generic descriptions
+- queries: use "${ioc.value}" literally in every query — never use placeholder text
 - xql: Cortex XDR / XSIAM XQL syntax
 - Return ONLY the JSON object. Nothing else.`;
 }
