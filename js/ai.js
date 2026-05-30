@@ -10,7 +10,16 @@ const AI_PROVIDERS = {
       return {
         url: 'https://api.groq.com/openai/v1/chat/completions',
         headers: k => ({ 'Authorization': `Bearer ${k}`, 'Content-Type': 'application/json' }),
-        body: { model: this.model, messages: [{ role: 'user', content: prompt }], max_tokens: 1200, temperature: 0.2 },
+        body: {
+          model: this.model,
+          messages: [
+            { role: 'system', content: 'You are a senior threat intelligence analyst. Respond ONLY with a valid JSON object — no markdown, no prose, no code fences.' },
+            { role: 'user', content: prompt },
+          ],
+          max_tokens: 1400,
+          temperature: 0.1,
+          response_format: { type: 'json_object' },
+        },
       };
     },
     parse: d => d.choices?.[0]?.message?.content,
@@ -29,7 +38,12 @@ const AI_PROVIDERS = {
           'anthropic-dangerous-direct-browser-access': 'true',
           'Content-Type': 'application/json',
         }),
-        body: { model: this.model, max_tokens: 1200, messages: [{ role: 'user', content: prompt }] },
+        body: {
+          model: this.model,
+          max_tokens: 1400,
+          system: 'You are a senior threat intelligence analyst. Respond ONLY with a valid JSON object — no markdown, no prose, no code fences.',
+          messages: [{ role: 'user', content: prompt }],
+        },
       };
     },
     parse: d => d.content?.[0]?.text,
@@ -43,7 +57,16 @@ const AI_PROVIDERS = {
       return {
         url: 'https://api.openai.com/v1/chat/completions',
         headers: k => ({ 'Authorization': `Bearer ${k}`, 'Content-Type': 'application/json' }),
-        body: { model: this.model, messages: [{ role: 'user', content: prompt }], max_tokens: 1200, temperature: 0.2 },
+        body: {
+          model: this.model,
+          messages: [
+            { role: 'system', content: 'You are a senior threat intelligence analyst. Respond ONLY with a valid JSON object — no markdown, no prose, no code fences.' },
+            { role: 'user', content: prompt },
+          ],
+          max_tokens: 1400,
+          temperature: 0.1,
+          response_format: { type: 'json_object' },
+        },
       };
     },
     parse: d => d.choices?.[0]?.message?.content,
@@ -57,7 +80,10 @@ const AI_PROVIDERS = {
       return {
         url: k => `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent?key=${k}`,
         headers: () => ({ 'Content-Type': 'application/json' }),
-        body: { contents: [{ parts: [{ text: prompt }] }], generationConfig: { maxOutputTokens: 1200, temperature: 0.2 } },
+        body: {
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { maxOutputTokens: 1400, temperature: 0.1, responseMimeType: 'application/json' },
+        },
       };
     },
     parse: d => d.candidates?.[0]?.content?.parts?.[0]?.text,
@@ -98,14 +124,15 @@ function buildAIPrompt(entry) {
 
 Required JSON structure (return exactly this, no extra fields):
 {
-  "narrative": "2-3 sentence analyst assessment covering what the IOC is, what threat activity it is linked to, and the recommended analyst action (block / investigate / monitor / allow)",
+  "narrative": "2-3 sentence analyst assessment — state what the IOC IS, what specific threat signals were found in the enrichment data, and the recommended action (block / investigate / monitor / allow)",
   "mitre": [
     {"id": "T1234.001", "name": "Sub-Technique Name", "tactic": "Tactic Name"}
   ],
   "queries": {
-    "kql": "// Microsoft Sentinel / Defender XDR\\nDeviceNetworkEvents\\n| where ...",
-    "spl": "index=* ...",
-    "sigma": "title: Detect ...\\nstatus: experimental\\nlogsource:\\n  category: network_connection\\ndetection:\\n  selection:\\n    dst_ip: '${ioc.value}'\\n  condition: selection"
+    "kql": "// Microsoft Sentinel / Defender XDR\\nDeviceNetworkEvents\\n| where RemoteIP == \\"${ioc.value}\\"",
+    "spl": "index=* dest_ip=\\"${ioc.value}\\"",
+    "sigma": "title: Detect Activity for ${ioc.value}\\nstatus: experimental\\nlogsource:\\n  category: network_connection\\ndetection:\\n  selection:\\n    dst_ip: '${ioc.value}'\\n  condition: selection",
+    "xql": "dataset = xdr_data\\n| filter dst_ip = \\"${ioc.value}\\""
   }
 }
 
@@ -115,10 +142,11 @@ Type: ${ioc.label}
 ${lines.length ? `Enrichment data:\n${lines.join('\n')}` : 'No enrichment data available — base analysis on IOC type only.'}
 
 Rules:
-- mitre array: 1-4 most relevant techniques based on the enrichment signals
-- queries: write real, runnable detection queries for this exact IOC value
-- narrative: analyst-grade language, specific findings, concrete action
-- Return ONLY the JSON. Nothing else.`;
+- narrative: MUST reference specific data from the enrichment results above (e.g. mention VT detection count, AbuseIPDB %, OTX pulse names, ThreatFox family). Do not write generic text.
+- mitre: 1-4 most relevant techniques derived from the enrichment signals
+- queries: use the exact IOC value "${ioc.value}" in every query — no placeholders
+- xql: Cortex XDR / XSIAM XQL syntax
+- Return ONLY the JSON object. Nothing else.`;
 }
 
 /* ── Call provider ───────────────────────────────────────────────────────── */
@@ -166,6 +194,7 @@ function parseAIResponse(raw) {
       kql:   String(parsed.queries?.kql   || '// No KQL query generated'),
       spl:   String(parsed.queries?.spl   || '// No SPL query generated'),
       sigma: String(parsed.queries?.sigma || '# No Sigma rule generated'),
+      xql:   String(parsed.queries?.xql   || '// No XQL query generated'),
     },
   };
 }
@@ -212,7 +241,7 @@ function renderAIResult(result, uid) {
     : '<span class="ai-na">No techniques mapped</span>';
 
   const tabId = `ai-q-${uid}`;
-  const tabs  = [['kql','KQL'],['spl','SPL'],['sigma','Sigma']];
+  const tabs  = [['kql','KQL'],['spl','SPL'],['sigma','Sigma'],['xql','XQL']];
   const tabsHtml = tabs.map(([k,l], i) =>
     `<button class="aq-tab${i===0?' active':''}" onclick="switchAITab('${tabId}','${k}',this)">${l}</button>`
   ).join('');
@@ -239,7 +268,7 @@ function renderAIResult(result, uid) {
 }
 
 function switchAITab(uid, tab, btn) {
-  ['kql','spl','sigma'].forEach(t => {
+  ['kql','spl','sigma','xql'].forEach(t => {
     const el = document.getElementById(`${uid}-${t}`);
     if (el) el.style.display = t === tab ? '' : 'none';
   });
