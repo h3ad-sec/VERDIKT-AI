@@ -210,8 +210,19 @@ function parseAIResponse(raw) {
   };
 }
 
-/* ── Result cache ────────────────────────────────────────────────────────── */
-const _aiCache = {};
+/* ── Result cache (sessionStorage — survives refresh, keyed by IOC value) ── */
+const _aiCache = {
+  _k: v => 'xv_ai_r_' + v,
+  get(iocValue) {
+    try { return JSON.parse(sessionStorage.getItem(this._k(iocValue))); } catch { return null; }
+  },
+  set(iocValue, result) {
+    try { sessionStorage.setItem(this._k(iocValue), JSON.stringify(result)); } catch {}
+  },
+  clear() {
+    Object.keys(sessionStorage).filter(k => k.startsWith('xv_ai_r_')).forEach(k => sessionStorage.removeItem(k));
+  },
+};
 
 /* ── Tactic color map ────────────────────────────────────────────────────── */
 const TACTIC_COLORS = {
@@ -237,23 +248,55 @@ function tacticColor(tactic) {
   return '#a78bfa';
 }
 
-/* ── Render result HTML ──────────────────────────────────────────────────── */
-function renderAIResult(result, uid) {
+/* ── Build plain-text report for clipboard ───────────────────────────────── */
+function buildAIReport(result, iocValue) {
   const { narrative, mitre, queries } = result;
-  const provId   = aiGetProv();
-  const provName = AI_PROVIDERS[provId]?.name || 'AI';
+  const mitreLines = mitre.length
+    ? mitre.map(t => `  ${t.id} · ${t.name} (${t.tactic})`).join('\n')
+    : '  None mapped';
+  return [
+    '=== VERDIKT-AI ANALYSIS ===',
+    `IOC: ${iocValue}`,
+    '',
+    'VERDICT',
+    narrative,
+    '',
+    'MITRE ATT&CK',
+    mitreLines,
+    '',
+    'KQL',
+    queries.kql,
+    '',
+    'SPL',
+    queries.spl,
+    '',
+    'SIGMA',
+    queries.sigma,
+    '',
+    'XQL',
+    queries.xql,
+  ].join('\n');
+}
+
+/* ── Render result HTML ──────────────────────────────────────────────────── */
+function renderAIResult(result, uid, iocValue) {
+  const { narrative, mitre, queries } = result;
+  const provId    = aiGetProv();
+  const provName  = AI_PROVIDERS[provId]?.name || 'AI';
   const provColor = AI_PROVIDERS[provId]?.color || '#a78bfa';
+  const reportStr = iocValue ? buildAIReport(result, iocValue) : '';
 
   const mitreHtml = mitre.length
     ? mitre.map(t => {
-        const col = tacticColor(t.tactic);
-        return `<span class="ai-badge" style="border-color:${col}40;color:${col}" title="${escapeHtml(t.tactic || '')}">${escapeHtml(t.id)} · ${escapeHtml(t.name)}</span>`;
+        const col  = tacticColor(t.tactic);
+        const link = t.id ? `https://attack.mitre.org/techniques/${t.id.replace('.','/')}` : '#';
+        return `<a class="ai-badge" href="${link}" target="_blank" rel="noopener" style="border-color:${col}40;color:${col};text-decoration:none" title="${escapeHtml(t.tactic || '')}">${escapeHtml(t.id)} · ${escapeHtml(t.name)}</a>`;
       }).join('')
     : '<span class="ai-na">No techniques mapped</span>';
 
-  const tabId = `ai-q-${uid}`;
-  const tabs  = [['kql','KQL'],['spl','SPL'],['sigma','Sigma'],['xql','XQL']];
-  const tabsHtml = tabs.map(([k,l], i) =>
+  const tabId     = `ai-q-${uid}`;
+  const tabs      = [['kql','KQL'],['spl','SPL'],['sigma','Sigma'],['xql','XQL']];
+  const tabsHtml  = tabs.map(([k,l], i) =>
     `<button class="aq-tab${i===0?' active':''}" onclick="switchAITab('${tabId}','${k}',this)">${l}</button>`
   ).join('');
   const blocksHtml = tabs.map(([k], i) =>
@@ -266,7 +309,10 @@ function renderAIResult(result, uid) {
   return `<div class="ai-panel-inner">
     <div class="ai-panel-meta">
       <span class="ai-prov-badge" style="border-color:${provColor}50;color:${provColor}">via ${escapeHtml(provName)}</span>
-      <button class="ai-rerun-btn" onclick="rerunAIPanel('${uid}')" title="Re-analyze">↺ Re-run</button>
+      <div style="display:flex;gap:6px">
+        ${reportStr ? `<button class="ai-rerun-btn" onclick="iiClipboard(${JSON.stringify(reportStr).replace(/'/g,"\\'")},'Report copied!')" title="Copy full analysis report">⎘ REPORT</button>` : ''}
+        <button class="ai-rerun-btn" onclick="rerunAIPanel('${uid}')" title="Re-analyze">↺ Re-run</button>
+      </div>
     </div>
     <div class="ai-section-label">ANALYST NARRATIVE</div>
     <div class="ai-narrative">${escapeHtml(narrative)}</div>
@@ -293,7 +339,7 @@ function switchAITab(uid, tab, btn) {
 /* ── Per-row AI toggle ───────────────────────────────────────────────────── */
 async function toggleAIPanel(i) {
   const panelRow = document.getElementById(`ai-panel-row-${i}`);
-  const btn = document.getElementById(`ai-btn-${i}`);
+  const btn      = document.getElementById(`ai-btn-${i}`);
 
   if (panelRow) {
     const isHidden = panelRow.style.display === 'none';
@@ -302,7 +348,6 @@ async function toggleAIPanel(i) {
     return;
   }
 
-  // Create panel row and insert after data row
   const dataRow = document.querySelector(`tr[data-row="${i}"]`);
   if (!dataRow) return;
 
@@ -311,57 +356,54 @@ async function toggleAIPanel(i) {
   pr.className = 'ai-panel-row';
   const td = document.createElement('td');
   td.colSpan = 13;
-  td.innerHTML = `<div class="ai-panel" id="ai-panel-${i}">
-    <div class="ai-loading"><div class="vc-spinner"></div><span>Analyzing with AI…</span></div>
-  </div>`;
+  td.innerHTML = `<div class="ai-panel" id="ai-panel-${i}"><div class="ai-loading"><div class="vc-spinner"></div><span>Analyzing with AI…</span></div></div>`;
   pr.appendChild(td);
   dataRow.after(pr);
   if (btn) btn.classList.add('active');
 
-  if (_aiCache[i]) {
-    document.getElementById(`ai-panel-${i}`).innerHTML = renderAIResult(_aiCache[i], i);
+  const entry    = scanResults[i];
+  const iocValue = entry?.ioc?.value;
+  const cached   = iocValue ? _aiCache.get(iocValue) : null;
+  if (cached) {
+    document.getElementById(`ai-panel-${i}`).innerHTML = renderAIResult(cached, i, iocValue);
     return;
   }
-  await _runAnalysis(i, `ai-panel-${i}`, i);
+  await _runAnalysis(i, `ai-panel-${i}`);
 }
 
 async function rerunAIPanel(uid) {
-  const i = typeof uid === 'number' ? uid : parseInt(uid);
-  delete _aiCache[i];
-  const panel = document.getElementById(`ai-panel-${i}`);
+  const i        = typeof uid === 'number' ? uid : parseInt(uid);
+  const entry    = scanResults[i];
+  if (entry?.ioc?.value) _aiCache.clear();           // clear only this key
+  const panel    = document.getElementById(`ai-panel-${i}`);
   if (panel) {
     panel.innerHTML = `<div class="ai-loading"><div class="vc-spinner"></div><span>Re-analyzing…</span></div>`;
-    await _runAnalysis(i, `ai-panel-${i}`, i);
+    await _runAnalysis(i, `ai-panel-${i}`);
   }
 }
 
-async function _runAnalysis(entryIdx, panelId, cacheKey) {
-  const entry  = scanResults[entryIdx];
-  const panel  = document.getElementById(panelId);
+async function _runAnalysis(entryIdx, panelId) {
+  const entry    = scanResults[entryIdx];
+  const panel    = document.getElementById(panelId);
   if (!entry || !panel) return;
 
-  const provId = aiGetProv();
-  const key    = aiGetKey(provId);
-  const prov   = AI_PROVIDERS[provId];
+  const iocValue = entry.ioc.value;
+  const provId   = aiGetProv();
+  const key      = aiGetKey(provId);
+  const prov     = AI_PROVIDERS[provId];
 
   if (!key) {
-    panel.innerHTML = `<div class="ai-error">
-      No API key for <strong>${prov?.name || provId}</strong>.
-      <button class="ai-link-btn" onclick="openAISettings()">Open AI Settings →</button>
-    </div>`;
+    panel.innerHTML = `<div class="ai-error">No API key for <strong>${prov?.name || provId}</strong>. <button class="ai-link-btn" onclick="openAISettings()">Open AI Settings →</button></div>`;
     return;
   }
 
   try {
     const raw    = await callAI(provId, key, buildAIPrompt(entry));
     const result = parseAIResponse(raw);
-    _aiCache[cacheKey] = result;
-    panel.innerHTML = renderAIResult(result, cacheKey);
+    _aiCache.set(iocValue, result);
+    panel.innerHTML = renderAIResult(result, entryIdx, iocValue);
   } catch (e) {
-    panel.innerHTML = `<div class="ai-error">
-      <span>Analysis failed: ${escapeHtml(e.message)}</span>
-      <button class="ai-link-btn" onclick="rerunAIPanel(${cacheKey})">Retry →</button>
-    </div>`;
+    panel.innerHTML = `<div class="ai-error"><span>Analysis failed: ${escapeHtml(e.message)}</span> <button class="ai-link-btn" onclick="rerunAIPanel(${entryIdx})">Retry →</button></div>`;
   }
 }
 
@@ -389,51 +431,49 @@ async function analyzeAll() {
         <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="5" stroke="#a78bfa" stroke-width="1.2"/><path d="M6 3.5v2.5l1.8 1.5" stroke="#a78bfa" stroke-width="1.2" stroke-linecap="round"/></svg>
         BATCH AI ANALYSIS
       </div>
-      <span class="ai-batch-counter" id="ai-batch-counter">0 / ${total}</span>
+      <span class="ai-batch-counter" id="ai-batch-counter">0 / ${total} done</span>
     </div>
     <div id="ai-batch-entries"></div>`;
 
   const container = document.getElementById('ai-batch-entries');
-  let done = 0;
+  let doneCount = 0;
 
   for (const { r: entry, i } of targets) {
+    const iocValue = entry.ioc.value;
     const div = document.createElement('div');
     div.className = 'abe-entry';
     div.id = `abe-${i}`;
     div.innerHTML = `
       <div class="abe-header">
-        <span class="abe-ioc" title="${escapeHtml(entry.ioc.value)}">${escapeHtml(truncate(entry.ioc.value, 52))}</span>
+        <span class="abe-dot abe-dot-loading" id="abe-dot-${i}"></span>
+        <span class="abe-ioc" title="${escapeHtml(iocValue)}">${escapeHtml(truncate(iocValue, 52))}</span>
         ${TYPE_BADGES[entry.ioc.type] || `<span class="type-badge">${escapeHtml(entry.ioc.label)}</span>`}
       </div>
-      <div class="ai-loading"><div class="vc-spinner"></div><span>Analyzing…</span></div>`;
+      <div class="ai-loading" id="abe-body-${i}"><div class="vc-spinner"></div><span>Analyzing…</span></div>`;
     container.appendChild(div);
 
-    const panelId = `abe-body-${i}`;
-    div.querySelector('.ai-loading').id = panelId;
-
     try {
-      let result;
-      if (_aiCache[i]) {
-        result = _aiCache[i];
-      } else {
+      let result = _aiCache.get(iocValue);
+      if (!result) {
         const raw = await callAI(provId, key, buildAIPrompt(entry));
         result = parseAIResponse(raw);
-        _aiCache[i] = result;
+        _aiCache.set(iocValue, result);
       }
-      document.getElementById(panelId).outerHTML = renderAIResult(result, `b${i}`).replace('<div class="ai-panel-inner">', `<div class="ai-panel-inner" id="${panelId}">`);
-      // Re-query since we replaced
-      const freshPanel = div.querySelector('.ai-panel-inner');
-      if (freshPanel) freshPanel.id = panelId;
+      const bodyEl = document.getElementById(`abe-body-${i}`);
+      if (bodyEl) bodyEl.outerHTML = renderAIResult(result, `b${i}`, iocValue);
+      const dot = document.getElementById(`abe-dot-${i}`);
+      if (dot) { dot.className = 'abe-dot abe-dot-done'; }
     } catch (e) {
-      const errEl = document.getElementById(panelId);
-      if (errEl) errEl.outerHTML = `<div class="ai-error" id="${panelId}">Failed: ${escapeHtml(e.message)}</div>`;
+      const bodyEl = document.getElementById(`abe-body-${i}`);
+      if (bodyEl) bodyEl.outerHTML = `<div class="ai-error">Failed: ${escapeHtml(e.message)}</div>`;
+      const dot = document.getElementById(`abe-dot-${i}`);
+      if (dot) { dot.className = 'abe-dot abe-dot-error'; }
     }
 
-    done++;
+    doneCount++;
     const counter = document.getElementById('ai-batch-counter');
-    if (counter) counter.textContent = `${done} / ${total}`;
-
-    if (done < total) await new Promise(res => setTimeout(res, 400));
+    if (counter) counter.textContent = `${doneCount} / ${total} done`;
+    if (doneCount < total) await new Promise(res => setTimeout(res, 400));
   }
 
   showToast(`AI analysis complete — ${total} IOC${total !== 1 ? 's' : ''} analyzed`, 'success');
@@ -465,6 +505,7 @@ function saveAIKey(provider) {
   if (!inp) return;
   aiSaveKey(provider, inp.value);
   showToast(`${AI_PROVIDERS[provider]?.name || provider} key saved`, 'success');
+  updateAIProvIndicator();
 }
 
 function clearAIKey(provider) {
@@ -472,13 +513,26 @@ function clearAIKey(provider) {
   const inp = document.getElementById(`byok-inp-${provider}`);
   if (inp) inp.value = '';
   showToast(`${AI_PROVIDERS[provider]?.name || provider} key cleared`, 'warning');
+  updateAIProvIndicator();
 }
 
 function selectAIProv(p, btn) {
   aiSetProv(p);
   document.querySelectorAll('.byok-prov-pill').forEach(b =>
     b.classList.toggle('active', b === btn));
+  updateAIProvIndicator();
 }
+
+/* ── Active provider indicator in hero ───────────────────────────────────── */
+function updateAIProvIndicator() {
+  const el = document.getElementById('ai-prov-indicator');
+  if (!el) return;
+  const p    = aiGetProv();
+  const prov = AI_PROVIDERS[p];
+  const hasKey = !!aiGetKey(p);
+  el.innerHTML = `<span style="color:${hasKey ? prov?.color : 'var(--muted)'}">${prov?.name || p}</span><span class="ai-prov-dot" style="background:${hasKey ? 'var(--accent)' : 'var(--muted)'}"></span>`;
+}
+document.addEventListener('DOMContentLoaded', updateAIProvIndicator);
 
 function toggleByokKey(provider) {
   const inp = document.getElementById(`byok-inp-${provider}`);

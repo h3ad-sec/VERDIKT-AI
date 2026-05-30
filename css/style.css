@@ -643,6 +643,18 @@ body.nav-compact .hamburger{display:flex;}
   *, *::before, *::after { transition: none !important; animation: none !important; }
 }
 
+/* ── AI slide-in animation ───────────────────────────────────────────────── */
+@keyframes aiSlideIn {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes aiFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.ai-panel-inner  { animation: aiSlideIn 0.2s ease-out; }
+.abe-entry       { animation: aiFadeIn  0.18s ease-out; }
+
 /* ══════════════════════════════════════════════════════════════════════════
    AI LAYER — VERDIKT-AI
    Purple (#a78bfa) is the AI color, distinct from enrichment green/blue
@@ -1016,6 +1028,23 @@ body.nav-compact .hamburger{display:flex;}
 .byok-clr-btn { color: var(--muted); }
 .byok-clr-btn:hover { color: var(--red); border-color: rgba(255,59,92,.4); }
 
+/* ── Hero provider indicator ─────────────────────────────────────────────── */
+.ai-prov-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: .5px;
+}
+.ai-prov-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
 /* ── Batch AI panel ──────────────────────────────────────────────────────── */
 #ai-batch-panel {
   background: var(--bg);
@@ -1066,3 +1095,22 @@ body.nav-compact .hamburger{display:flex;}
   max-width: 400px;
 }
 .abe-type { flex-shrink: 0; }
+
+/* ── Batch entry status dots ─────────────────────────────────────────────── */
+.abe-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: inline-block;
+}
+.abe-dot-loading {
+  background: var(--muted);
+  animation: abePulse 1s ease-in-out infinite;
+}
+.abe-dot-done  { background: var(--accent); }
+.abe-dot-error { background: var(--red); }
+@keyframes abePulse {
+  0%, 100% { opacity: .4; }
+  50%       { opacity: 1; }
+}

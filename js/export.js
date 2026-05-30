@@ -15,6 +15,7 @@ function rowToFlat(entry) {
     if (src.error) return `Error: ${src.error}`;
     return fn(src) ?? '-';
   };
+  const aiResult = (typeof _aiCache !== 'undefined') ? _aiCache.get(entry.ioc.value) : null;
   const base = {
     'IOC':           entry.ioc.value,
     'Type':          entry.ioc.label,
@@ -26,6 +27,12 @@ function rowToFlat(entry) {
     'URLhaus':       srcVal(entry.urlhaus,  s => s.notFound ? 'Not found': `${s.urlsCount||0} URLs`),
     'MalwareBazaar': srcVal(entry.mb,       s => s.notFound ? 'Clean'    : `${s.count||0} samples`),
     'HybridAnalysis':srcVal(entry.ha,       s => s.notFound ? 'No hits'  : `${s.count||0} hits`),
+    'AI_Narrative':  aiResult ? aiResult.narrative : '',
+    'AI_MITRE':      aiResult ? aiResult.mitre.map(t => `${t.id} ${t.name}`).join('; ') : '',
+    'AI_KQL':        aiResult ? aiResult.queries.kql   : '',
+    'AI_SPL':        aiResult ? aiResult.queries.spl   : '',
+    'AI_Sigma':      aiResult ? aiResult.queries.sigma : '',
+    'AI_XQL':        aiResult ? aiResult.queries.xql   : '',
   };
   const isIP = entry.ioc.type === 'ip' || entry.ioc.type === 'ipv6';
   if (!isIP) return base;

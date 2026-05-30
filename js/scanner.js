@@ -53,6 +53,7 @@ async function startScan() {
   VtBucket.tokens = 4; VtBucket.lastRefill = Date.now();
 
   isScanning = true; stopRequested = false; scanResults = []; totalScanned = 0;
+  if (typeof _aiCache !== 'undefined') _aiCache.clear();
 
   for (const ioc of iocs) {
     scanResults.push({
