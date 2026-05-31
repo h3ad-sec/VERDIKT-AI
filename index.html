@@ -337,6 +337,14 @@
 
         <div class="result-filter-bar">
           <div class="filter-group">
+            <span class="filter-bar-label">VERDICT:</span>
+            <button class="result-filter active" data-filter="all" onclick="filterResults('all',this)">ALL</button>
+            <button class="result-filter" data-filter="malicious" onclick="filterResults('malicious',this)">🔴 MAL</button>
+            <button class="result-filter" data-filter="suspicious" onclick="filterResults('suspicious',this)">🟡 SUS</button>
+            <button class="result-filter" data-filter="benign" onclick="filterResults('benign',this)">🟢 BENIGN</button>
+            <button class="result-filter" data-filter="unknown" onclick="filterResults('unknown',this)">⚪ UNKNOWN</button>
+          </div>
+          <div class="filter-group">
             <span class="filter-bar-label">TYPE:</span>
             <button class="type-filter active" data-tfilter="all" onclick="filterByType('all',this)">ALL</button>
             <button class="type-filter" data-tfilter="ip" onclick="filterByType('ip',this)" style="color:var(--ab)">IP</button>
@@ -356,14 +364,13 @@
               <tr>
                 <th class="col-ioc">IOC</th>
                 <th class="col-type">TYPE</th>
+                <th class="col-verdict">VERDICT · SCORE</th>
                 <th class="col-vt" style="color:var(--vt)">VT</th>
-                <th class="col-iab" style="color:var(--ab)">ABUSEIPDB</th>
-                <th class="col-ivt" style="color:var(--us)">URLSCAN</th>
-                <th class="col-mb" style="color:var(--mb)">MB</th>
-                <th class="col-iotx" style="color:var(--otx)">OTX</th>
-                <th class="col-itf" style="color:var(--tf)">THREATFOX</th>
-                <th class="col-uh" style="color:var(--uh)">URLHAUS</th>
+                <th class="col-ab">AB · MB · US</th>
+                <th class="col-otx" style="color:var(--otx)">OTX</th>
                 <th class="col-ha" style="color:var(--ha)">HA</th>
+                <th class="col-tf">TF · UH</th>
+                <th class="col-flags">FLAGS</th>
                 <th class="col-icopy"></th>
                 <th class="col-idetail">DETAIL</th>
                 <th class="col-ai" style="color:#a78bfa">AI</th>

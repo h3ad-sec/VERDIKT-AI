@@ -68,7 +68,7 @@ async function detectServerStatus() {
       if (status.mode === 'server') {
         window._serverVTPaid = status.vt_paid === true;
         setServerStatusDots(status);
-          const active = Object.values(status).filter(v => v === true).length;
+        const active = Object.values(status).filter(v => v === true).length;
         showToast(`Server online - ${active} source${active !== 1 ? 's' : ''} configured`, active >= 3 ? 'success' : 'warning');
         return;
       }

@@ -1,5 +1,16 @@
 /* ── VERDIKT-AI · AI Analysis Engine ─────────────────────────────────────── */
 
+const AI_SYSTEM_PROMPT = `You are an L3 SOC analyst and threat hunter with expertise in APT tracking, malware analysis, and production SIEM rule authoring for critical infrastructure environments.
+
+STRICT DATA DISCIPLINE:
+- Never invent artifact values, malware families, threat actor names, or MITRE technique IDs not present in the enrichment input.
+- If input is sparse, output must be sparse — fewer accurate items is correct.
+- CRITICAL severity = confirmed C2/exfil/breach only. Never inflate.
+- MITRE: use sub-technique specificity (T1003.001 not T1003). Only map what the enrichment data directly supports. Empty array if nothing supports a mapping.
+- Queries: syntactically correct, copy-pasteable, using the exact IOC value from input. No placeholder values. No generic templates.
+- Actor attribution only if explicitly named in the enrichment data.
+- Respond ONLY with a valid JSON object — no markdown, no prose, no code fences.`;
+
 const AI_PROVIDERS = {
   groq: {
     name: 'Groq',
@@ -13,7 +24,7 @@ const AI_PROVIDERS = {
         body: {
           model: this.model,
           messages: [
-            { role: 'system', content: 'You are a senior threat intelligence analyst. Respond ONLY with a valid JSON object — no markdown, no prose, no code fences.' },
+            { role: 'system', content: AI_SYSTEM_PROMPT },
             { role: 'user', content: prompt },
           ],
           max_tokens: 1400,
@@ -41,7 +52,7 @@ const AI_PROVIDERS = {
         body: {
           model: this.model,
           max_tokens: 1400,
-          system: 'You are a senior threat intelligence analyst. Respond ONLY with a valid JSON object — no markdown, no prose, no code fences.',
+          system: AI_SYSTEM_PROMPT,
           messages: [{ role: 'user', content: prompt }],
         },
       };
@@ -60,7 +71,7 @@ const AI_PROVIDERS = {
         body: {
           model: this.model,
           messages: [
-            { role: 'system', content: 'You are a senior threat intelligence analyst. Respond ONLY with a valid JSON object — no markdown, no prose, no code fences.' },
+            { role: 'system', content: AI_SYSTEM_PROMPT },
             { role: 'user', content: prompt },
           ],
           max_tokens: 1400,
@@ -81,6 +92,7 @@ const AI_PROVIDERS = {
         url: k => `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent?key=${k}`,
         headers: () => ({ 'Content-Type': 'application/json' }),
         body: {
+          system_instruction: { parts: [{ text: AI_SYSTEM_PROMPT }] },
           contents: [{ parts: [{ text: prompt }] }],
           generationConfig: { maxOutputTokens: 1400, temperature: 0.1, responseMimeType: 'application/json' },
         },
@@ -122,42 +134,41 @@ function buildAIPrompt(entry) {
 
   const noData = !lines.length;
 
-  return `You are a SOC analyst writing a triage verdict. Return ONLY a valid JSON object.
-
-JSON structure:
+  return `Return ONLY a valid JSON object with this structure:
 {
-  "narrative": "<3 sentences — see exact format below>",
+  "narrative": "<3 sentences>",
   "mitre": [{"id": "T1234.001", "name": "Technique Name", "tactic": "Tactic"}],
   "queries": {
-    "kql": "<KQL for Sentinel/Defender>",
+    "kql": "<KQL — DETECT: alert-specific or HUNT: estate-wide>",
     "spl": "<Splunk SPL>",
     "sigma": "<Sigma YAML>",
     "xql": "<Cortex XDR XQL>"
   }
 }
 
-NARRATIVE — 3 sentences, no more:
+NARRATIVE — exactly 3 sentences:
 S1: "VERDICT: [MALICIOUS|SUSPICIOUS|BENIGN|UNKNOWN] — [what this IOC is, one clause]"
-S2: [What the data shows — only numbers and facts from the enrichment below, nothing invented]
+S2: [Only numbers and facts from the enrichment below — nothing invented]
 S3: "Recommendation: [single concrete action]"
 
-WRITING RULES — follow all of these:
-- Only use what is in the enrichment data. If a source shows nothing, do not mention it.
-- No invented context, no assumed attribution, no guessed malware families unless explicitly named in the data.
-- No filler: never write "It is worth noting", "importantly", "in the current threat landscape", "sophisticated", "robust", "comprehensive", "leveraging", "delve", "significant", "concerning".
-- No over-qualification: no "may", "could potentially", "it appears that", "seems to suggest".
-- No dramatization of clean IOCs. If all sources return clean, verdict is BENIGN and say so plainly.
-- Short sentences. Active voice. Analyst tone — like a triage note, not a report.
-- Numbers must match the enrichment data exactly. No rounding up.
+WRITING RULES:
+- Only cite sources that appear in the enrichment data with actual values.
+- No invented context, no guessed malware families, no assumed attribution.
+- No filler: "It is worth noting", "sophisticated", "robust", "leveraging", "concerning", "significant", "in the current threat landscape".
+- No over-qualification: "may", "could potentially", "seems to suggest".
+- BENIGN: if all sources return clean, say so plainly. Do not dramatize.
+- Numbers must match enrichment data exactly.
 
-BAD (never write like this): "This IP exhibits concerning characteristics and may potentially be leveraging sophisticated techniques associated with advanced threat actors, as evidenced by multiple intelligence sources flagging this infrastructure."
-GOOD (write like this): "VERDICT: MALICIOUS — C2 node linked to Qbot. VT: 14/92 engines, AbuseIPDB: 88% (2,341 reports), ThreatFox: 2 C2 IOCs at 100% confidence. Recommendation: Block at firewall, alert on any internal host that reached this IP."
+MITRE: only map techniques the enrichment data directly supports. Use sub-technique IDs (T1078.003). Return empty array if nothing supports a mapping.
+
+QUERIES: use the exact IOC value in each query. DETECT: prefix for alert-triggered queries. HUNT: prefix for estate-wide proactive queries. No placeholder values.
+
+BAD: "This IP exhibits concerning characteristics and may potentially be leveraging sophisticated techniques..."
+GOOD: "VERDICT: MALICIOUS — C2 node linked to Qbot. VT: 14/92 engines, AbuseIPDB: 88% (2,341 reports), ThreatFox: 2 C2 IOCs at 100% confidence. Recommendation: Block at firewall, alert on any internal host that reached this IP."
 
 IOC: ${ioc.value}
 Type: ${ioc.label}
-${noData ? '\nNo enrichment data returned — base verdict on IOC type only, mark UNKNOWN.' : `\nEnrichment data:\n${lines.join('\n')}`}
-
-Return ONLY the JSON. No markdown. No explanation outside the JSON.`;
+${noData ? '\nNo enrichment data — mark UNKNOWN, return empty mitre array, still generate syntactically correct queries using the IOC value.' : `\nEnrichment data:\n${lines.join('\n')}`}`;
 }
 
 /* ── Call provider ───────────────────────────────────────────────────────── */
@@ -248,7 +259,13 @@ function tacticColor(tactic) {
   return '#a78bfa';
 }
 
-/* ── Build plain-text report for clipboard ───────────────────────────────── */
+/* ── Report clipboard ────────────────────────────────────────────────────── */
+function copyAIReport(iocValue) {
+  const cached = _aiCache.get(iocValue);
+  if (!cached) return;
+  iiClipboard(buildAIReport(cached, iocValue), 'Report copied!');
+}
+
 function buildAIReport(result, iocValue) {
   const { narrative, mitre, queries } = result;
   const mitreLines = mitre.length
@@ -306,11 +323,13 @@ function renderAIResult(result, uid, iocValue) {
     </div>`
   ).join('');
 
+  const escapedIOC = iocValue ? escapeAttr(iocValue) : '';
+
   return `<div class="ai-panel-inner">
     <div class="ai-panel-meta">
       <span class="ai-prov-badge" style="border-color:${provColor}50;color:${provColor}">via ${escapeHtml(provName)}</span>
       <div style="display:flex;gap:6px">
-        ${reportStr ? `<button class="ai-rerun-btn" onclick="iiClipboard(${JSON.stringify(reportStr).replace(/'/g,"\\'")},'Report copied!')" title="Copy full analysis report">⎘ REPORT</button>` : ''}
+        ${iocValue ? `<button class="ai-rerun-btn" onclick="copyAIReport('${escapedIOC}')" title="Copy full analysis report">⎘ REPORT</button>` : ''}
         <button class="ai-rerun-btn" onclick="rerunAIPanel('${uid}')" title="Re-analyze">↺ Re-run</button>
       </div>
     </div>
@@ -355,7 +374,7 @@ async function toggleAIPanel(i) {
   pr.id = `ai-panel-row-${i}`;
   pr.className = 'ai-panel-row';
   const td = document.createElement('td');
-  td.colSpan = 13;
+  td.colSpan = 12;
   td.innerHTML = `<div class="ai-panel" id="ai-panel-${i}"><div class="ai-loading"><div class="vc-spinner"></div><span>Analyzing with AI…</span></div></div>`;
   pr.appendChild(td);
   dataRow.after(pr);
@@ -527,8 +546,8 @@ function selectAIProv(p, btn) {
 function updateAIProvIndicator() {
   const el = document.getElementById('ai-prov-indicator');
   if (!el) return;
-  const p    = aiGetProv();
-  const prov = AI_PROVIDERS[p];
+  const p      = aiGetProv();
+  const prov   = AI_PROVIDERS[p];
   const hasKey = !!aiGetKey(p);
   el.innerHTML = `<span style="color:${hasKey ? prov?.color : 'var(--muted)'}">${prov?.name || p}</span><span class="ai-prov-dot" style="background:${hasKey ? 'var(--accent)' : 'var(--muted)'}"></span>`;
 }
