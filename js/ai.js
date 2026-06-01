@@ -136,14 +136,7 @@ function buildAIPrompt(entry) {
 
   return `Return ONLY a valid JSON object with this structure:
 {
-  "narrative": "<3 sentences>",
-  "mitre": [{"id": "T1234.001", "name": "Technique Name", "tactic": "Tactic"}],
-  "queries": {
-    "kql": "<KQL — DETECT: alert-specific or HUNT: estate-wide>",
-    "spl": "<Splunk SPL>",
-    "sigma": "<Sigma YAML>",
-    "xql": "<Cortex XDR XQL>"
-  }
+  "narrative": "<paragraph>"
 }
 
 NARRATIVE — 2 to 3 sentences written as a single paragraph. Write exactly like a senior SOC analyst documenting a triage finding:
@@ -162,16 +155,12 @@ WRITING RULES — non-negotiable:
 - Only reference a source if it returned a non-zero, non-null value. Zero pulses = skip OTX. Zero detections = VT says clean, state that if relevant.
 - No invented context. If data is sparse, write fewer sentences. Do not pad.
 
-MITRE: only map techniques the enrichment data directly supports. Use sub-technique IDs (T1078.003). Return empty array if nothing supports a mapping.
-
-QUERIES: use the exact IOC value in each query. DETECT: prefix for alert-triggered queries. HUNT: prefix for estate-wide proactive queries. No placeholder values.
-
 BAD: "This IP exhibits concerning characteristics and may potentially be leveraging sophisticated techniques associated with advanced threat actors, as evidenced by multiple intelligence sources."
-GOOD: "185.220.101.34 is a TOR exit node flagged by 47 of 93 VirusTotal engines and reported by 289 AbuseIPDB users at 100% confidence. ThreatFox identifies two C2 indicators at maximum confidence, consistent with the malware families listed in OTX. Block this IP at the perimeter and alert on any internal host that communicated with it in the past 30 days."
+GOOD: "185.220.101.34 is a TOR exit node flagged by 47 of 93 VirusTotal engines and reported by 289 AbuseIPDB users at 100% confidence. ThreatFox identifies two C2 indicators at maximum confidence. Block this IP at the perimeter and alert on any internal host that communicated with it in the past 30 days."
 
 IOC: ${ioc.value}
 Type: ${ioc.label}
-${noData ? '\nNo enrichment data — mark UNKNOWN, return empty mitre array, still generate syntactically correct queries using the IOC value.' : `\nEnrichment data:\n${lines.join('\n')}`}`;
+${noData ? '\nNo enrichment data returned — verdict is UNKNOWN. Write one sentence stating no data was available.' : `\nEnrichment data:\n${lines.join('\n')}`}`;
 }
 
 /* ── Call provider ───────────────────────────────────────────────────────── */
@@ -205,23 +194,12 @@ async function callAI(provId, key, prompt) {
 /* ── Parse AI response ───────────────────────────────────────────────────── */
 function parseAIResponse(raw) {
   let text = raw.trim();
-  // Strip markdown code fences
   const fence = text.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (fence) text = fence[1].trim();
-  // Extract JSON object
   const s = text.indexOf('{'), e = text.lastIndexOf('}');
   if (s === -1 || e === -1) throw new Error('No JSON object in response');
   const parsed = JSON.parse(text.slice(s, e + 1));
-  return {
-    narrative: String(parsed.narrative || ''),
-    mitre:     Array.isArray(parsed.mitre) ? parsed.mitre.slice(0, 5) : [],
-    queries:   {
-      kql:   String(parsed.queries?.kql   || '// No KQL query generated'),
-      spl:   String(parsed.queries?.spl   || '// No SPL query generated'),
-      sigma: String(parsed.queries?.sigma || '# No Sigma rule generated'),
-      xql:   String(parsed.queries?.xql   || '// No XQL query generated'),
-    },
-  };
+  return { narrative: String(parsed.narrative || '') };
 }
 
 /* ── Result cache (sessionStorage — survives refresh, keyed by IOC value) ── */
@@ -238,125 +216,33 @@ const _aiCache = {
   },
 };
 
-/* ── Tactic color map ────────────────────────────────────────────────────── */
-const TACTIC_COLORS = {
-  'initial access':        '#f97316',
-  'execution':             '#ef4444',
-  'persistence':           '#a855f7',
-  'privilege escalation':  '#ec4899',
-  'defense evasion':       '#6366f1',
-  'credential access':     '#f59e0b',
-  'discovery':             '#14b8a6',
-  'lateral movement':      '#8b5cf6',
-  'collection':            '#06b6d4',
-  'command and control':   '#FF3B5C',
-  'c2':                    '#FF3B5C',
-  'exfiltration':          '#f97316',
-  'impact':                '#ef4444',
-  'reconnaissance':        '#64748b',
-  'resource development':  '#64748b',
-};
-function tacticColor(tactic) {
-  const t = (tactic || '').toLowerCase();
-  for (const [k, v] of Object.entries(TACTIC_COLORS)) if (t.includes(k)) return v;
-  return '#a78bfa';
-}
-
 /* ── Report clipboard ────────────────────────────────────────────────────── */
 function copyAIReport(iocValue) {
   const cached = _aiCache.get(iocValue);
   if (!cached) return;
-  iiClipboard(buildAIReport(cached, iocValue), 'Report copied!');
-}
-
-function buildAIReport(result, iocValue) {
-  const { narrative, mitre, queries } = result;
-  const mitreLines = mitre.length
-    ? mitre.map(t => `  ${t.id} · ${t.name} (${t.tactic})`).join('\n')
-    : '  None mapped';
-  return [
-    '=== VERDIKT-AI ANALYSIS ===',
-    `IOC: ${iocValue}`,
-    '',
-    'VERDICT',
-    narrative,
-    '',
-    'MITRE ATT&CK',
-    mitreLines,
-    '',
-    'KQL',
-    queries.kql,
-    '',
-    'SPL',
-    queries.spl,
-    '',
-    'SIGMA',
-    queries.sigma,
-    '',
-    'XQL',
-    queries.xql,
-  ].join('\n');
+  iiClipboard(`IOC: ${iocValue}\n\n${cached.narrative}`, 'Copied!');
 }
 
 /* ── Render result HTML ──────────────────────────────────────────────────── */
 function renderAIResult(result, uid, iocValue) {
-  const { narrative, mitre, queries } = result;
+  const { narrative } = result;
   const provId    = aiGetProv();
   const provName  = AI_PROVIDERS[provId]?.name || 'AI';
   const provColor = AI_PROVIDERS[provId]?.color || '#a78bfa';
-  const reportStr = iocValue ? buildAIReport(result, iocValue) : '';
-
-  const mitreHtml = mitre.length
-    ? mitre.map(t => {
-        const col  = tacticColor(t.tactic);
-        const link = t.id ? `https://attack.mitre.org/techniques/${t.id.replace('.','/')}` : '#';
-        return `<a class="ai-badge" href="${link}" target="_blank" rel="noopener" style="border-color:${col}40;color:${col};text-decoration:none" title="${escapeHtml(t.tactic || '')}">${escapeHtml(t.id)} · ${escapeHtml(t.name)}</a>`;
-      }).join('')
-    : '<span class="ai-na">No techniques mapped</span>';
-
-  const tabId     = `ai-q-${uid}`;
-  const tabs      = [['kql','KQL'],['spl','SPL'],['sigma','Sigma'],['xql','XQL']];
-  const tabsHtml  = tabs.map(([k,l], i) =>
-    `<button class="aq-tab${i===0?' active':''}" onclick="switchAITab('${tabId}','${k}',this)">${l}</button>`
-  ).join('');
-  const blocksHtml = tabs.map(([k], i) =>
-    `<div class="ai-query-block" id="${tabId}-${k}"${i>0?' style="display:none"':''}>
-      <button class="ai-copy-btn" onclick="iiClipboard(document.getElementById('${tabId}-${k}-pre').textContent,'Copied!')" title="Copy query">COPY</button>
-      <pre id="${tabId}-${k}-pre">${escapeHtml(queries[k])}</pre>
-    </div>`
-  ).join('');
-
   const escapedIOC = iocValue ? escapeAttr(iocValue) : '';
 
   return `<div class="ai-panel-inner">
     <div class="ai-panel-meta">
       <span class="ai-prov-badge" style="border-color:${provColor}50;color:${provColor}">via ${escapeHtml(provName)}</span>
       <div style="display:flex;gap:6px">
-        ${iocValue ? `<button class="ai-rerun-btn" onclick="copyAIReport('${escapedIOC}')" title="Copy full analysis report">⎘ REPORT</button>` : ''}
+        ${iocValue ? `<button class="ai-rerun-btn" onclick="copyAIReport('${escapedIOC}')" title="Copy narrative">⎘ COPY</button>` : ''}
         <button class="ai-rerun-btn" onclick="rerunAIPanel('${uid}')" title="Re-analyze">↺ Re-run</button>
       </div>
     </div>
-    <div class="ai-section-label">ANALYST NARRATIVE</div>
     <div class="ai-narrative">${escapeHtml(narrative)}</div>
-    <div class="ai-section-label">MITRE ATT&amp;CK</div>
-    <div class="ai-badges">${mitreHtml}</div>
-    <div class="ai-section-label">DETECTION QUERIES</div>
-    <div class="ai-query-tabs">${tabsHtml}</div>
-    ${blocksHtml}
   </div>`;
 }
 
-function switchAITab(uid, tab, btn) {
-  ['kql','spl','sigma','xql'].forEach(t => {
-    const el = document.getElementById(`${uid}-${t}`);
-    if (el) el.style.display = t === tab ? '' : 'none';
-  });
-  if (btn) {
-    const tabs = btn.closest('.ai-query-tabs');
-    if (tabs) tabs.querySelectorAll('.aq-tab').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-  }
-}
 
 /* ── Per-row AI toggle ───────────────────────────────────────────────────── */
 async function toggleAIPanel(i) {
