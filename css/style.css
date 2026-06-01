@@ -237,7 +237,7 @@ body.light .btn-primary{color:#fff;}
 .results-table thead tr{background:var(--panel2);border-bottom:1px solid rgba(0,212,255,.18);box-shadow:0 1px 0 rgba(0,212,255,.06);}
 .results-table th{padding:9px 8px;text-align:left;font-family:var(--mono);font-size:10px;letter-spacing:1.4px;color:rgba(125,143,179,.8);font-weight:400;white-space:nowrap;overflow:hidden;}
 /* Results table column widths — 12 columns (IOC is flexible, takes remaining space) */
-.results-table:not(.ipintel-table) .col-ioc     { min-width:130px; }
+.results-table:not(.ipintel-table) .col-ioc     { width:180px; min-width:130px; }
 .results-table:not(.ipintel-table) .col-type    { width:60px; }
 .results-table:not(.ipintel-table) .col-verdict { width:150px; }
 .results-table:not(.ipintel-table) .col-vt      { width:68px; text-align:center; }
