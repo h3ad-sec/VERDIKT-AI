@@ -142,7 +142,7 @@ function buildAIPrompt(entry) {
 NARRATIVE — 2 to 3 sentences written as a single paragraph. Write exactly like a senior SOC analyst documenting a triage finding:
 - State what the IOC is and the verdict in the first sentence, using the highest-signal data point to anchor it.
 - Cite specific numbers from the enrichment (engine counts, confidence percentages, report counts, pulse counts). Name sources by their common names: VirusTotal, AbuseIPDB, OTX, ThreatFox, URLhaus, MalwareBazaar, HybridAnalysis.
-- Close with one concrete recommended action. No "Recommendation:" label — weave it into the last sentence naturally.
+- Do NOT include any action recommendation, remediation steps, or what the analyst should do next. State only what the data shows.
 - No section headers, no "VERDICT:" prefix, no bullet points inside the narrative field.
 - If the IOC is clean across all sources, say that plainly in one sentence.
 
@@ -156,7 +156,7 @@ WRITING RULES — non-negotiable:
 - No invented context. If data is sparse, write fewer sentences. Do not pad.
 
 BAD: "This IP exhibits concerning characteristics and may potentially be leveraging sophisticated techniques associated with advanced threat actors, as evidenced by multiple intelligence sources."
-GOOD: "185.220.101.34 is a TOR exit node flagged by 47 of 93 VirusTotal engines and reported by 289 AbuseIPDB users at 100% confidence. ThreatFox identifies two C2 indicators at maximum confidence. Block this IP at the perimeter and alert on any internal host that communicated with it in the past 30 days."
+GOOD: "185.220.101.34 is a confirmed TOR exit node flagged by 47 of 93 VirusTotal engines and reported by 289 AbuseIPDB users at 100% confidence. ThreatFox lists two C2 indicators at maximum confidence, and OTX shows 14 threat pulses across multiple campaigns."
 
 IOC: ${ioc.value}
 Type: ${ioc.label}

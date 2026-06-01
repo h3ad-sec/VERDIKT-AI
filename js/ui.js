@@ -98,6 +98,7 @@ function buildVerdictCell(verdict, score, confidence, done) {
     <span class="verdict-badge ${v.cls}">${v.icon} ${v.label}</span>
     <div class="vc-meta">
       <span class="vc-score">${score!=null?score:'-'}<span class="vc-score-unit">/100</span></span>
+      <span class="vc-sep">·</span>
       <span class="vc-conf" style="color:${confColor}">${(confidence||'-').toUpperCase()}</span>
     </div>
   </div>`;
