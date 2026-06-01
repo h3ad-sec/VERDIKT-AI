@@ -139,28 +139,27 @@ function buildAIPrompt(entry) {
   "narrative": "<paragraph>"
 }
 
-NARRATIVE — 2 to 3 sentences written as a single paragraph. Write exactly like a senior SOC analyst documenting a triage finding:
-- State what the IOC is and the verdict in the first sentence, using the highest-signal data point to anchor it.
-- Cite specific numbers from the enrichment (engine counts, confidence percentages, report counts, pulse counts). Name sources by their common names: VirusTotal, AbuseIPDB, OTX, ThreatFox, URLhaus, MalwareBazaar, HybridAnalysis.
-- Do NOT include any action recommendation, remediation steps, or what the analyst should do next. State only what the data shows.
-- No section headers, no "VERDICT:" prefix, no bullet points inside the narrative field.
-- If the IOC is clean across all sources, say that plainly in one sentence.
+NARRATIVE — 2 to 3 sentences as a paragraph, written for a security team actively investigating an incident.
 
-WRITING RULES — non-negotiable:
-- Active voice. Short sentences. Every word earns its place.
-- Never write: "It is worth noting", "significant", "sophisticated", "robust", "leveraging", "utilize", "in the current threat landscape", "exhibits", "indicative of", "associated with potential", "it appears".
-- Never hedge: "may", "could potentially", "seems to suggest", "might indicate".
-- Numbers must match the enrichment data exactly — never round up or invent.
-- Only name malware families, threat actors, or campaigns if they appear explicitly in the enrichment data. If they are not in the data, do not mention them.
-- Only reference a source if it returned a non-zero, non-null value. Zero pulses = skip OTX. Zero detections = VT says clean, state that if relevant.
-- No invented context. If data is sparse, write fewer sentences. Do not pad.
+Structure:
+- S1: State what this IOC is based on the enrichment data — its classification, threat type, or observed role (C2, payload host, phishing domain, malware dropper, etc).
+- S2: Give investigation context — what does this IOC's presence suggest about the intrusion stage or adversary behavior? What artifact types or log sources would reveal scope? Ground this in the specific enrichment signals returned, not generic advice.
+- S3 (only if enrichment supports it): A specific pivot — a correlated artifact type, infrastructure pattern, or timeline anchor that narrows the investigation. Omit if data does not support a concrete pivot.
 
-BAD: "This IP exhibits concerning characteristics and may potentially be leveraging sophisticated techniques associated with advanced threat actors, as evidenced by multiple intelligence sources."
-GOOD: "185.220.101.34 is a confirmed TOR exit node flagged by 47 of 93 VirusTotal engines and reported by 289 AbuseIPDB users at 100% confidence. ThreatFox lists two C2 indicators at maximum confidence, and OTX shows 14 threat pulses across multiple campaigns."
+RULES:
+- No remediation, no action recommendations (no block/isolate/quarantine/escalate).
+- No generic statements that apply regardless of data ("check your logs", "monitor for suspicious activity").
+- Cite exact numbers from enrichment. Never invent or round up.
+- Skip sources with zero or null values entirely.
+- Sparse data = short narrative. One sentence is correct when data is limited.
+- Banned phrases: "It is worth noting", "sophisticated", "robust", "leveraging", "exhibits", "indicative of", "it appears", "in the current threat landscape", "may", "could potentially", "seems to suggest".
+
+BAD: "This IP exhibits concerning characteristics and may potentially be leveraging sophisticated techniques. Analysts should monitor for suspicious activity."
+GOOD: "185.220.101.34 is a confirmed TOR exit node with 47 of 93 VirusTotal detections and 100% AbuseIPDB confidence across 289 reports, consistent with C2 relay or proxy infrastructure. The two ThreatFox C2 listings at maximum confidence and 14 OTX pulses indicate this IP is active in an ongoing campaign — analysts should pull DNS and proxy logs for outbound connections to this IP and review process execution on any host that made contact."
 
 IOC: ${ioc.value}
 Type: ${ioc.label}
-${noData ? '\nNo enrichment data returned — verdict is UNKNOWN. Write one sentence stating no data was available.' : `\nEnrichment data:\n${lines.join('\n')}`}`;
+${noData ? '\nNo enrichment data. Write one sentence stating no intelligence data was returned for this IOC.' : `\nEnrichment data:\n${lines.join('\n')}`}`;
 }
 
 /* ── Call provider ───────────────────────────────────────────────────────── */
@@ -263,7 +262,7 @@ async function toggleAIPanel(i) {
   pr.id = `ai-panel-row-${i}`;
   pr.className = 'ai-panel-row';
   const td = document.createElement('td');
-  td.colSpan = 12;
+  td.colSpan = 10;
   td.innerHTML = `<div class="ai-panel" id="ai-panel-${i}"><div class="ai-loading"><div class="vc-spinner"></div><span>Analyzing with AI…</span></div></div>`;
   pr.appendChild(td);
   dataRow.after(pr);

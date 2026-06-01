@@ -59,11 +59,7 @@ async function startScan() {
     scanResults.push({
       ioc, vt: null, ab: null, otx: null,
       urlscan: null, threatfox: null, urlhaus: null,
-      mb: null, ha: null,
-      verdict: null, confidence: null, action: null,
-      score: null, vtPts: null, abPts: null, mbPts: null, otxPts: null,
-      tfPts: null, usPts: null, uhPts: null, haPts: null,
-      reasons: [], indicators: [], flags: [], done: false,
+      mb: null, ha: null, done: false,
     });
   }
 
@@ -81,8 +77,7 @@ async function startScan() {
     updateProgress(i, iocs.length, ioc.value);
     updateRowLoading(i);
     await runParallelScan(entry);
-    const scored = scoreEntry(entry);
-    Object.assign(entry, scored, { done: true });
+    entry.done = true;
     totalScanned++;
     updateRow(i, entry);
     renderSummary(scanResults);
@@ -155,124 +150,6 @@ async function runParallelScan(entry) {
   entry.vt = vt; entry.ab = ab; entry.otx = otx;
   entry.urlscan = urlscan; entry.threatfox = threatfox; entry.urlhaus = urlhaus;
   entry.mb = mb; entry.ha = ha;
-}
-
-/* Scoring weights:
-   IP:     VT(30) + AbuseIPDB(40) + OTX(10) + ThreatFox(20) = 100
-   Hash:   VT(30) + MB(15)        + OTX(10) + ThreatFox(15) + HA(30) = 100
-   Domain: VT(50) + URLScan(20)   + OTX(10) + ThreatFox(20) = 100
-   URL:    VT(50) + URLScan(20)   + OTX(10) + URLhaus(20)   = 100  */
-function scoreEntry(entry) {
-  const { vt, ab, otx, urlscan, threatfox, urlhaus, mb, ha } = entry;
-  const t        = entry.ioc.type;
-  const iocIsIP  = t === 'ip' || t === 'ipv6';
-  const iocIsHash= t.startsWith('hash_');
-  const iocIsDom = t === 'domain';
-  const iocIsUrl = t === 'url';
-  let vtPts=0, abPts=0, mbPts=0, otxPts=0, tfPts=0, usPts=0, uhPts=0, haPts=0;
-  let sourcesChecked = 0;
-  const reasons=[], indicators=[], flags=[];
-
-  const vtMax = iocIsIP ? 30 : iocIsHash ? 30 : 50;
-  if (vt && !vt.skipped && !vt.error) {
-    const mal=vt.malicious||0, total=vt.total||0;
-    if (total > 0) {
-      sourcesChecked++;
-      vtPts = Math.round((mal/total)*vtMax);
-      indicators.push(`VT: ${mal}/${total}`);
-      if (mal > 0) reasons.push(`Detected by ${mal} VT engine${mal>1?'s':''}`);
-    }
-  }
-
-  if (ab && !ab.skipped && !ab.error) {
-    sourcesChecked++;
-    const s=ab.score||0;
-    abPts = Math.round((s/100)*40);
-    indicators.push(`AbuseIPDB: ${s}%`);
-    if (s >= 75) reasons.push(`High abuse score (${s}%) on AbuseIPDB`);
-    else if (s >= 25) reasons.push(`Moderate abuse score (${s}%) on AbuseIPDB`);
-  }
-
-  if (otx && !otx.skipped && !otx.error) {
-    sourcesChecked++;
-    const p=otx.pulseCount||0;
-    otxPts = Math.min(10, Math.round((p/5)*10));
-    if (p > 0) { indicators.push(`OTX: ${p} pulse${p>1?'s':''}`); reasons.push(`Listed in ${p} OTX pulse${p>1?'s':''}`); }
-  }
-
-  const tfHit = threatfox && !threatfox.skipped && !threatfox.error && !threatfox.notFound && (threatfox.iocCount||0) > 0;
-  if (tfHit) {
-    indicators.push(`ThreatFox: ${threatfox.iocCount} C2`);
-    reasons.push(`ThreatFox: ${threatfox.iocCount} C2 indicator${threatfox.iocCount>1?'s':''}`);
-    if (iocIsIP || iocIsDom) { sourcesChecked++; tfPts = Math.min(20, Math.round((threatfox.maxConfidence||100)/100*20)); }
-    else if (iocIsHash)      { sourcesChecked++; tfPts = Math.min(15, Math.round((threatfox.maxConfidence||100)/100*15)); }
-  }
-
-  const usHit = urlscan && !urlscan.skipped && !urlscan.error && !urlscan.notFound && (urlscan.total||0) > 0;
-  if (usHit) {
-    indicators.push(`URLScan: ${urlscan.maliciousCount||0}/${urlscan.total} malicious`);
-    if (iocIsDom || iocIsUrl) {
-      sourcesChecked++;
-      usPts = Math.min(20, Math.round((urlscan.maliciousCount||0)/Math.max(urlscan.total,1)*20));
-      if ((urlscan.maliciousCount||0) > 0) reasons.push(`${urlscan.maliciousCount} malicious URLScan result${urlscan.maliciousCount>1?'s':''}`);
-    } else if (iocIsIP) flags.push(`US:${urlscan.total}`);
-  }
-
-  const uhHit = urlhaus && !urlhaus.skipped && !urlhaus.error && !urlhaus.notFound && (urlhaus.urlsCount||0) > 0;
-  if (uhHit) {
-    indicators.push(`URLhaus: ${urlhaus.urlsCount} URL${urlhaus.urlsCount>1?'s':''}`);
-    if (iocIsUrl) { sourcesChecked++; uhPts = 20; reasons.push(`URLhaus: ${urlhaus.urlsCount} malicious URL${urlhaus.urlsCount>1?'s':''}`); }
-    else flags.push('UH:URLS');
-  }
-
-  const mbHit = mb && !mb.skipped && !mb.error && !mb.notFound && (mb.count||0) > 0;
-  if (iocIsHash && mbHit) {
-    sourcesChecked++; mbPts = 15;
-    indicators.push(`MalwareBazaar: ${mb.count} sample${mb.count>1?'s':''}`);
-    reasons.push(`Found in MalwareBazaar${mb.families?.length?` (${mb.families[0]})`:''}`)
-  }
-  if (mbHit && !iocIsHash) flags.push('MB:HIT');
-
-  const haHit = ha && !ha.skipped && !ha.error && !ha.notFound && (ha.count||0) > 0;
-  if (iocIsHash && haHit) {
-    sourcesChecked++;
-    haPts = Math.min(30, Math.round((ha.maxScore||0)/100*30));
-    indicators.push(`HA: ${ha.count} sandbox hit${ha.count>1?'s':''}`);
-    if ((ha.maxScore||0) >= 70 || ha.verdict === 'malicious') reasons.push(`HybridAnalysis: malicious sandbox result`);
-  }
-
-  let score;
-  if      (iocIsIP)   score = Math.min(100, vtPts + abPts + otxPts + tfPts);
-  else if (iocIsHash) score = Math.min(100, vtPts + mbPts + otxPts + tfPts + haPts);
-  else if (iocIsDom)  score = Math.min(100, vtPts + usPts + otxPts + tfPts);
-  else                score = Math.min(100, vtPts + usPts + otxPts + uhPts);
-
-  const abScore=ab?.score||0, vtMal=vt?.malicious||0;
-  let verdict;
-  if      (abScore>=75||vtMal>=5||score>=60||(tfHit&&(iocIsIP||iocIsHash||iocIsDom))) verdict='malicious';
-  else if (score>=30||abScore>=25||vtMal>=1||(uhHit&&iocIsUrl)||(haHit&&iocIsHash))   verdict='suspicious';
-  else if (sourcesChecked>=2)                                                           verdict='benign';
-  else                                                                                  verdict='unknown';
-
-  if (sourcesChecked===0&&!tfHit&&verdict==='benign') verdict='unknown';
-  if (verdict==='benign'&&(otx?.pulseCount||0)>0) verdict='unknown';
-
-  const verdictMeta = {
-    malicious:  { confidence:'high',          action:'block' },
-    suspicious: { confidence:'medium',        action:'investigate' },
-    benign:     { confidence:'informational', action:'allow' },
-    unknown:    { confidence:'low',           action:'monitor' },
-  };
-  const { confidence, action } = verdictMeta[verdict];
-  if (!reasons.length) reasons.push(sourcesChecked===0?'Sources pending or unavailable':'No threat signals detected');
-
-  return {
-    score, vtPts, abPts, mbPts, otxPts, tfPts, usPts, uhPts, haPts,
-    verdict, confidence, action,
-    reasons: reasons.slice(0,3),
-    indicators: indicators.slice(0,6),
-    flags,
-  };
 }
 
 function stopScan() { stopRequested = true; showToast('Stopping after current IOC…', 'warning'); }

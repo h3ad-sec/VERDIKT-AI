@@ -1,7 +1,6 @@
 
-let currentVerdictFilter = 'all';
-let currentTypeFilter    = 'all';
-let currentSearch        = '';
+let currentTypeFilter = 'all';
+let currentSearch     = '';
 let _currentModalEntry = null;
 
 const TYPE_BADGES = {
@@ -53,16 +52,15 @@ function renderResultRows(results) {
 }
 
 function buildRow(entry, i) {
-  const { ioc, verdict, action, score, vtPts, abPts, mbPts, otxPts, tfPts, usPts, uhPts, haPts, confidence, flags, done } = entry;
+  const { ioc, vt, ab, otx, urlscan, threatfox, urlhaus, mb, ha, done } = entry;
   const typeBadge    = TYPE_BADGES[ioc.type] || `<span class="type-badge">${escapeHtml(ioc.label)}</span>`;
   const privateBadge = ioc.isPrivate ? '<div class="ioc-private-badge">PRIVATE</div>' : '';
-  const displayVal   = ioc.type === 'url' || ioc.type.startsWith('hash_') ? truncate(ioc.value, 48) : ioc.value;
+  const displayVal   = ioc.type === 'url' || ioc.type.startsWith('hash_') ? truncate(ioc.value, 52) : ioc.value;
   const isHash = ioc.type.startsWith('hash_');
   const isIP   = ioc.type === 'ip' || ioc.type === 'ipv6';
   const isURL  = ioc.type === 'url';
-  const vtMax  = isIP ? 30 : isHash ? 30 : 50;
 
-  return `<tr data-row="${i}" data-verdict="${verdict||'pending'}" data-action="${action||''}" data-type="${escapeAttr(ioc.type)}" data-ioc="${escapeAttr(ioc.value)}">
+  return `<tr data-row="${i}" data-type="${escapeAttr(ioc.type)}" data-ioc="${escapeAttr(ioc.value)}">
     <td class="td-ioc">
       <div class="ioc-val-wrap">
         <span class="ioc-val" title="${escapeAttr(ioc.value)}">${escapeHtml(displayVal)}</span>
@@ -71,69 +69,45 @@ function buildRow(entry, i) {
       ${privateBadge}
     </td>
     <td>${typeBadge}</td>
-    <td id="v-${i}">${buildVerdictCell(verdict, score, confidence, done)}</td>
-    <td id="vt-${i}">${buildSourceScoreCell('vt', vtPts, entry.vt, done, vtMax)}</td>
-    <td id="ab-${i}">${isHash ? buildSourceScoreCell('mb', mbPts, entry.mb, done, 15) : isIP ? buildSourceScoreCell('ab', abPts, entry.ab, done, 40) : buildSourceScoreCell('us', usPts, entry.urlscan, done, 20)}</td>
-    <td id="otx-${i}">${buildSourceScoreCell('otx', otxPts, entry.otx, done, 10)}</td>
-    <td id="ha-${i}">${isHash ? buildSourceScoreCell('ha', haPts, entry.ha, done, 30) : '<span style="color:var(--muted);font-size:11px">-</span>'}</td>
-    <td id="tf-${i}">${isURL ? buildSourceScoreCell('uh', uhPts, entry.urlhaus, done, 20) : buildSourceScoreCell('tf', tfPts, entry.threatfox, done, isHash?15:20)}</td>
-    <td id="fl-${i}">${buildFlagsCell(flags, done)}</td>
-    <td id="copy-${i}">${done ? `<button class="btn-ii-copy" onclick="copyStdRow(${i})" title="Copy as key-value">⎘</button>` : ''}</td>
+    <td id="vt-${i}">${buildSourceCell('vt', vt, done)}</td>
+    <td id="ab-${i}">${isHash ? buildSourceCell('mb', mb, done) : isIP ? buildSourceCell('ab', ab, done) : buildSourceCell('us', urlscan, done)}</td>
+    <td id="otx-${i}">${buildSourceCell('otx', otx, done)}</td>
+    <td id="ha-${i}">${isHash ? buildSourceCell('ha', ha, done) : '<span class="src-na">—</span>'}</td>
+    <td id="tf-${i}">${isURL ? buildSourceCell('uh', urlhaus, done) : buildSourceCell('tf', threatfox, done)}</td>
+    <td id="copy-${i}">${done ? `<button class="btn-ii-copy" onclick="copyStdRow(${i})" title="Copy">⎘</button>` : ''}</td>
     <td id="det-${i}">${done ? `<button class="btn-detail" onclick="openModal(${i})">DETAIL</button>` : '<span class="src-loading">…</span>'}</td>
     <td id="ai-btn-${i}">${done ? `<button class="btn-ai" onclick="toggleAIPanel(${i})" title="AI analysis">AI</button>` : ''}</td>
   </tr>`;
 }
 
-function buildVerdictCell(verdict, score, confidence, done) {
-  if (!done) return `<div class="verdict-pending-cell"><div class="vc-spinner"></div><span>Scanning…</span></div>`;
-  const vMap = {
-    malicious:  { icon:'🔴', label:'MALICIOUS',  cls:'verdict-malicious' },
-    suspicious: { icon:'🟡', label:'SUSPICIOUS', cls:'verdict-suspicious' },
-    benign:     { icon:'🟢', label:'BENIGN',     cls:'verdict-benign' },
-    unknown:    { icon:'⚪', label:'UNKNOWN',    cls:'verdict-unknown' },
-  };
-  const v = vMap[verdict] || vMap.unknown;
-  const confColor = { high:'var(--accent)', medium:'var(--yellow)', low:'var(--muted)', informational:'var(--accent2)' }[confidence] || 'var(--muted)';
-  return `<div class="verdict-cell">
-    <span class="verdict-badge ${v.cls}">${v.icon} ${v.label}</span>
-    <div class="vc-meta">
-      <span class="vc-score">${score!=null?score:'-'}<span class="vc-score-unit">/100</span></span>
-      <span class="vc-sep">·</span>
-      <span class="vc-conf" style="color:${confColor}">${(confidence||'-').toUpperCase()}</span>
-    </div>
-  </div>`;
-}
-
-function buildSourceScoreCell(src, pts, data, done, maxPts) {
+function buildSourceCell(src, data, done) {
   if (!done) return '<span class="src-loading">…</span>';
-  const colors = { vt:'var(--vt)', ab:'var(--ab)', otx:'var(--otx)', mb:'var(--mb)', tf:'var(--tf)', us:'var(--us)', uh:'var(--uh)', ha:'var(--ha)' };
-  const col = colors[src] || 'var(--muted)';
-  if (!data || data.skipped) return `<div class="src-score-cell"><span style="color:var(--muted);font-size:11px">-</span></div>`;
-  if (data.error) return `<div class="src-score-cell"><span style="color:var(--muted);font-size:11px" title="${escapeAttr(data.error)}">ERR</span></div>`;
-  const pct = (pts!=null&&maxPts>0) ? Math.min(100,Math.round((pts/maxPts)*100)) : 0;
-  let label = '';
-  if (src==='vt')  label = data.total>0 ? `${data.malicious}/${data.total}` : 'N/A';
-  if (src==='ab')  label = `${data.score||0}%`;
-  if (src==='otx') label = `${data.pulseCount||0} pulse${(data.pulseCount||0)!==1?'s':''}`;
-  if (src==='mb')  label = data.notFound ? 'Clean' : `${data.count||0} sample${(data.count||0)!==1?'s':''}`;
-  if (src==='tf')  label = data.notFound ? 'No C2' : `${data.iocCount||0} C2${data.maxConfidence?` ${data.maxConfidence}%`:''}`;
-  if (src==='us')  label = data.notFound ? 'No scans' : `${data.maliciousCount||0}/${data.total||0} mal`;
-  if (src==='uh')  label = data.notFound ? 'Not found' : `${data.urlsCount||0} URL${(data.urlsCount||0)!==1?'s':''}`;
-  if (src==='ha')  label = data.notFound ? 'No hits' : (data.families?.[0] ? truncate(data.families[0],12) : `${data.count||0} hit${(data.count||0)!==1?'s':''}`);
-  return `<div class="src-score-cell">
-    <div class="src-val" style="color:${col}">${escapeHtml(label)}</div>
-    <div class="src-bar"><div class="src-bar-fill" style="width:${pct}%;background:${col}"></div></div>
-  </div>`;
-}
-
-function buildFlagsCell(flags, done) {
-  if (!done) return '<span class="src-loading">…</span>';
-  if (!flags?.length) return '<span style="color:var(--muted);font-size:11px">-</span>';
-  const flagColors = { 'TF:C2':'var(--tf)', 'UH:URLS':'var(--uh)', 'MB:HIT':'var(--mb)' };
-  return flags.map(f => {
-    const col = flagColors[f] || (f.startsWith('US:') ? 'var(--us)' : 'var(--muted)');
-    return `<span class="flag-chip" style="border-color:${col};color:${col}">${escapeHtml(f)}</span>`;
-  }).join('');
+  if (!data || data.skipped) return '<span class="src-na">—</span>';
+  if (data.error) return `<span class="src-na" title="${escapeAttr(data.error)}">ERR</span>`;
+  const C = { vt:'var(--vt)', ab:'var(--ab)', otx:'var(--otx)', mb:'var(--mb)', tf:'var(--tf)', us:'var(--us)', uh:'var(--uh)', ha:'var(--ha)' };
+  const col = C[src] || 'var(--text)';
+  switch (src) {
+    case 'vt':
+      if (!data.total) return '<span class="src-na">—</span>';
+      return `<span class="src-chip" style="color:${data.malicious>0?'var(--red)':col}">${data.malicious}/${data.total}</span>`;
+    case 'ab':
+      return `<span class="src-chip" style="color:${data.score>=75?'var(--red)':data.score>=25?'var(--yellow)':col}">${data.score}%</span>`;
+    case 'otx':
+      return `<span class="src-chip" style="color:${data.pulseCount>0?'var(--yellow)':'var(--muted)'}">${data.pulseCount}p</span>`;
+    case 'mb':
+      return data.notFound ? '<span class="src-na">—</span>' : `<span class="src-chip" style="color:var(--red)">${data.count}</span>`;
+    case 'tf':
+      return data.notFound ? '<span class="src-na">—</span>' : `<span class="src-chip" style="color:var(--red)">${data.iocCount} C2</span>`;
+    case 'us':
+      if (data.notFound||!data.total) return '<span class="src-na">—</span>';
+      return `<span class="src-chip" style="color:${data.maliciousCount>0?'var(--red)':col}">${data.maliciousCount}/${data.total}</span>`;
+    case 'uh':
+      return data.notFound ? '<span class="src-na">—</span>' : `<span class="src-chip" style="color:var(--red)">${data.urlsCount}</span>`;
+    case 'ha':
+      if (data.notFound||!data.count) return '<span class="src-na">—</span>';
+      return `<span class="src-chip" style="color:${data.verdict==='malicious'?'var(--red)':'var(--yellow)'}">${data.count}</span>`;
+  }
+  return '<span class="src-na">—</span>';
 }
 
 function buildIntelCell(src, data, done) {
@@ -190,63 +164,43 @@ function copyStdRow(i) {
 }
 
 function updateRow(i, entry) {
-  const { verdict, action, score, vtPts, abPts, mbPts, otxPts, tfPts, usPts, uhPts, haPts, confidence, flags, vt, ab, mb, otx, ha, threatfox, urlhaus, urlscan } = entry;
+  const { vt, ab, mb, otx, ha, threatfox, urlhaus, urlscan } = entry;
   const t      = entry.ioc.type;
   const isHash = t.startsWith('hash_');
   const isIP   = t === 'ip' || t === 'ipv6';
   const isURL  = t === 'url';
-  const vtMax  = isIP ? 30 : isHash ? 30 : 50;
   const g   = id => document.getElementById(`${id}-${i}`);
   const set = (id, html) => { const el = g(id); if (el) el.innerHTML = html; };
 
-  set('v',      buildVerdictCell(verdict, score, confidence, true));
-  set('vt',     buildSourceScoreCell('vt', vtPts, vt, true, vtMax));
-  set('ab',     isHash ? buildSourceScoreCell('mb', mbPts, mb, true, 15) : isIP ? buildSourceScoreCell('ab', abPts, ab, true, 40) : buildSourceScoreCell('us', usPts, urlscan, true, 20));
-  set('otx',    buildSourceScoreCell('otx', otxPts, otx, true, 10));
-  set('ha',     isHash ? buildSourceScoreCell('ha', haPts, ha, true, 30) : '<span style="color:var(--muted);font-size:11px">-</span>');
-  set('tf',     isURL ? buildSourceScoreCell('uh', uhPts, urlhaus, true, 20) : buildSourceScoreCell('tf', tfPts, threatfox, true, isHash?15:20));
-  set('fl',     buildFlagsCell(flags, true));
-  set('copy',   `<button class="btn-ii-copy" onclick="copyStdRow(${i})" title="Copy as key-value">⎘</button>`);
+  set('vt',     buildSourceCell('vt', vt, true));
+  set('ab',     isHash ? buildSourceCell('mb', mb, true) : isIP ? buildSourceCell('ab', ab, true) : buildSourceCell('us', urlscan, true));
+  set('otx',    buildSourceCell('otx', otx, true));
+  set('ha',     isHash ? buildSourceCell('ha', ha, true) : '<span class="src-na">—</span>');
+  set('tf',     isURL ? buildSourceCell('uh', urlhaus, true) : buildSourceCell('tf', threatfox, true));
+  set('copy',   `<button class="btn-ii-copy" onclick="copyStdRow(${i})" title="Copy">⎘</button>`);
   set('det',    `<button class="btn-detail" onclick="openModal(${i})">DETAIL</button>`);
   set('ai-btn', `<button class="btn-ai" onclick="toggleAIPanel(${i})" title="AI analysis">AI</button>`);
-
-  const row = document.querySelector(`tr[data-row="${i}"]`);
-  if (row) { row.dataset.verdict = verdict||'unknown'; row.dataset.action = action||''; }
   applyFilters();
 }
 
 function updateRowLoading(i) {
-  ['v','vt','ab','otx','ha','tf','fl','ai-btn'].forEach(id => {
+  ['vt','ab','otx','ha','tf','ai-btn'].forEach(id => {
     const el = document.getElementById(`${id}-${i}`);
-    if (el) el.innerHTML = '<div class="verdict-pending-cell"><div class="vc-spinner"></div></div>';
+    if (el) el.innerHTML = '<span class="src-loading">…</span>';
   });
 }
 
 /* ── Summary strip ────────────────────────────────────────────────────────── */
 function renderSummary(results) {
-  const done = results.filter(r => r.done);
-  const cnt  = { malicious:0, suspicious:0, benign:0, unknown:0 };
-  const scores = [];
-  done.forEach(r => { if (cnt[r.verdict]!==undefined) cnt[r.verdict]++; if (r.score!=null) scores.push(r.score); });
-  const avg = scores.length ? Math.round(scores.reduce((a,b)=>a+b,0)/scores.length) : null;
+  const done = results.filter(r => r.done).length;
   document.getElementById('summary-strip').innerHTML = `
-    <div class="summary-card sc-total"><span class="sc-icon">📋</span><div><div class="summary-num">${results.length}</div><div class="summary-lbl">TOTAL</div></div></div>
-    <div class="summary-card"><div><div class="summary-num" style="color:var(--red)">${cnt.malicious}</div><div class="summary-lbl">MALICIOUS</div></div></div>
-    <div class="summary-card"><div><div class="summary-num" style="color:var(--yellow)">${cnt.suspicious}</div><div class="summary-lbl">SUSPICIOUS</div></div></div>
-    <div class="summary-card"><div><div class="summary-num" style="color:var(--accent)">${cnt.benign}</div><div class="summary-lbl">BENIGN</div></div></div>
-    <div class="summary-card"><div><div class="summary-num" style="color:var(--muted)">${cnt.unknown}</div><div class="summary-lbl">UNKNOWN</div></div></div>
-    ${avg!=null?`<div class="summary-card"><div><div class="summary-num" style="color:var(--accent2)">${avg}</div><div class="summary-lbl">AVG RISK</div></div></div>`:''}
+    <div class="summary-card sc-total"><span class="sc-icon">📋</span><div><div class="summary-num">${results.length}</div><div class="summary-lbl">TOTAL IOCs</div></div></div>
+    <div class="summary-card"><div><div class="summary-num" style="color:var(--accent)">${done}</div><div class="summary-lbl">ANALYZED</div></div></div>
+    <div class="summary-card"><div><div class="summary-num" style="color:var(--muted)">${results.length-done}</div><div class="summary-lbl">PENDING</div></div></div>
   `;
 }
 
 /* ── Filters ─────────────────────────────────────────────────────────────── */
-function filterResults(v, btn) {
-  currentVerdictFilter = v;
-  document.querySelectorAll('[data-filter]').forEach(b => b.classList.remove('active'));
-  if (btn) btn.classList.add('active');
-  applyFilters();
-}
-
 function filterByType(t, btn) {
   currentTypeFilter = t;
   document.querySelectorAll('.type-filter[data-tfilter]').forEach(b => b.classList.remove('active'));
@@ -259,13 +213,11 @@ function searchResults(val) { currentSearch = val.toLowerCase().trim(); applyFil
 function applyFilters() {
   document.querySelectorAll('#results-body tr[data-row]').forEach(row => {
     const tp  = row.dataset.type || '';
-    const vrd = row.dataset.verdict || '';
     const ioc = (row.dataset.ioc || '').toLowerCase();
-    const matchV = currentVerdictFilter === 'all' || vrd === currentVerdictFilter;
     const matchT = currentTypeFilter === 'all' || tp === currentTypeFilter
                    || (currentTypeFilter === 'hash' && tp.startsWith('hash_'));
     const matchS = !currentSearch || ioc.includes(currentSearch);
-    const hide = !(matchV && matchT && matchS);
+    const hide = !(matchT && matchS);
     row.classList.toggle('hidden', hide);
     const panelRow = document.getElementById(`ai-panel-row-${row.dataset.row}`);
     if (panelRow && hide) panelRow.style.display = 'none';

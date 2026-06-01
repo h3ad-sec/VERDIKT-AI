@@ -9,7 +9,7 @@
     content="VERDIKT-AI by H3AD-SEC — Deep IOC enrichment with 9 threat intelligence sources + BYOK AI analysis. Supports IPs, domains, URLs, and hashes. VT · AbuseIPDB · OTX · URLScan · ThreatFox · URLhaus · MalwareBazaar · HybridAnalysis. No More Tool-Hopping.">
   <link rel="icon" href="https://h3ad-sec.github.io/fevicon.png?v=2026" type="image/png">
   <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Exo+2:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=20260601d">
+  <link rel="stylesheet" href="css/style.css?v=20260601e">
 </head>
 
 <body class="dark">
@@ -337,14 +337,6 @@
 
         <div class="result-filter-bar">
           <div class="filter-group">
-            <span class="filter-bar-label">VERDICT:</span>
-            <button class="result-filter active" data-filter="all" onclick="filterResults('all',this)">ALL</button>
-            <button class="result-filter" data-filter="malicious" onclick="filterResults('malicious',this)">🔴 MAL</button>
-            <button class="result-filter" data-filter="suspicious" onclick="filterResults('suspicious',this)">🟡 SUS</button>
-            <button class="result-filter" data-filter="benign" onclick="filterResults('benign',this)">🟢 BENIGN</button>
-            <button class="result-filter" data-filter="unknown" onclick="filterResults('unknown',this)">⚪ UNKNOWN</button>
-          </div>
-          <div class="filter-group">
             <span class="filter-bar-label">TYPE:</span>
             <button class="type-filter active" data-tfilter="all" onclick="filterByType('all',this)">ALL</button>
             <button class="type-filter" data-tfilter="ip" onclick="filterByType('ip',this)" style="color:var(--ab)">IP</button>
@@ -364,13 +356,11 @@
               <tr>
                 <th class="col-ioc">IOC</th>
                 <th class="col-type">TYPE</th>
-                <th class="col-verdict">VERDICT · SCORE</th>
                 <th class="col-vt" style="color:var(--vt)">VT</th>
                 <th class="col-ab">AB · MB · US</th>
                 <th class="col-otx" style="color:var(--otx)">OTX</th>
                 <th class="col-ha" style="color:var(--ha)">HA</th>
                 <th class="col-tf">TF · UH</th>
-                <th class="col-flags">FLAGS</th>
                 <th class="col-icopy"></th>
                 <th class="col-idetail">DETAIL</th>
                 <th class="col-ai" style="color:#a78bfa">AI</th>
@@ -580,11 +570,11 @@
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
   <script src="js/ioc-parser.js?v=20260514"></script>
   <script src="js/api.js?v=20260529"></script>
-  <script src="js/scanner.js?v=20260601"></script>
-  <script src="js/ui.js?v=20260601c"></script>
+  <script src="js/scanner.js?v=20260601e"></script>
+  <script src="js/ui.js?v=20260601e"></script>
   <script src="js/export.js?v=20260509"></script>
   <script src="js/app.js?v=20260514"></script>
-  <script src="js/ai.js?v=20260601d"></script>
+  <script src="js/ai.js?v=20260601e"></script>
 
   <script>
     /* ── NAV ──────────────────────────────────────────────────────────────────── */
