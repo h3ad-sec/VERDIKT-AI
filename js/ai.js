@@ -146,25 +146,28 @@ function buildAIPrompt(entry) {
   }
 }
 
-NARRATIVE — exactly 3 sentences:
-S1: "VERDICT: [MALICIOUS|SUSPICIOUS|BENIGN|UNKNOWN] — [what this IOC is, one clause]"
-S2: [Only numbers and facts from the enrichment below — nothing invented]
-S3: "Recommendation: [single concrete action]"
+NARRATIVE — 2 to 3 sentences written as a single paragraph. Write exactly like a senior SOC analyst documenting a triage finding:
+- State what the IOC is and the verdict in the first sentence, using the highest-signal data point to anchor it.
+- Cite specific numbers from the enrichment (engine counts, confidence percentages, report counts, pulse counts). Name sources by their common names: VirusTotal, AbuseIPDB, OTX, ThreatFox, URLhaus, MalwareBazaar, HybridAnalysis.
+- Close with one concrete recommended action. No "Recommendation:" label — weave it into the last sentence naturally.
+- No section headers, no "VERDICT:" prefix, no bullet points inside the narrative field.
+- If the IOC is clean across all sources, say that plainly in one sentence.
 
-WRITING RULES:
-- Only cite sources that appear in the enrichment data with actual values.
-- No invented context, no guessed malware families, no assumed attribution.
-- No filler: "It is worth noting", "sophisticated", "robust", "leveraging", "concerning", "significant", "in the current threat landscape".
-- No over-qualification: "may", "could potentially", "seems to suggest".
-- BENIGN: if all sources return clean, say so plainly. Do not dramatize.
-- Numbers must match enrichment data exactly.
+WRITING RULES — non-negotiable:
+- Active voice. Short sentences. Every word earns its place.
+- Never write: "It is worth noting", "significant", "sophisticated", "robust", "leveraging", "utilize", "in the current threat landscape", "exhibits", "indicative of", "associated with potential", "it appears".
+- Never hedge: "may", "could potentially", "seems to suggest", "might indicate".
+- Numbers must match the enrichment data exactly — never round up or invent.
+- Only name malware families, threat actors, or campaigns if they appear explicitly in the enrichment data. If they are not in the data, do not mention them.
+- Only reference a source if it returned a non-zero, non-null value. Zero pulses = skip OTX. Zero detections = VT says clean, state that if relevant.
+- No invented context. If data is sparse, write fewer sentences. Do not pad.
 
 MITRE: only map techniques the enrichment data directly supports. Use sub-technique IDs (T1078.003). Return empty array if nothing supports a mapping.
 
 QUERIES: use the exact IOC value in each query. DETECT: prefix for alert-triggered queries. HUNT: prefix for estate-wide proactive queries. No placeholder values.
 
-BAD: "This IP exhibits concerning characteristics and may potentially be leveraging sophisticated techniques..."
-GOOD: "VERDICT: MALICIOUS — C2 node linked to Qbot. VT: 14/92 engines, AbuseIPDB: 88% (2,341 reports), ThreatFox: 2 C2 IOCs at 100% confidence. Recommendation: Block at firewall, alert on any internal host that reached this IP."
+BAD: "This IP exhibits concerning characteristics and may potentially be leveraging sophisticated techniques associated with advanced threat actors, as evidenced by multiple intelligence sources."
+GOOD: "185.220.101.34 is a TOR exit node flagged by 47 of 93 VirusTotal engines and reported by 289 AbuseIPDB users at 100% confidence. ThreatFox identifies two C2 indicators at maximum confidence, consistent with the malware families listed in OTX. Block this IP at the perimeter and alert on any internal host that communicated with it in the past 30 days."
 
 IOC: ${ioc.value}
 Type: ${ioc.label}
@@ -423,6 +426,76 @@ async function _runAnalysis(entryIdx, panelId) {
     panel.innerHTML = renderAIResult(result, entryIdx, iocValue);
   } catch (e) {
     panel.innerHTML = `<div class="ai-error"><span>Analysis failed: ${escapeHtml(e.message)}</span> <button class="ai-link-btn" onclick="rerunAIPanel(${entryIdx})">Retry →</button></div>`;
+  }
+}
+
+/* ── IP Intel AI toggle ──────────────────────────────────────────────────── */
+async function toggleIPIntelAIPanel(i) {
+  const panelRow = document.getElementById(`ai-panel-ipi-row-${i}`);
+  const btn      = document.getElementById(`ii-ai-${i}`);
+
+  if (panelRow) {
+    const isHidden = panelRow.style.display === 'none';
+    panelRow.style.display = isHidden ? '' : 'none';
+    if (btn) btn.querySelector('.btn-ai')?.classList.toggle('active', isHidden);
+    return;
+  }
+
+  const dataRow = document.querySelector(`#ipintel-body tr[data-row="${i}"]`);
+  if (!dataRow) return;
+
+  const pr = document.createElement('tr');
+  pr.id = `ai-panel-ipi-row-${i}`;
+  pr.className = 'ai-panel-row';
+  const td = document.createElement('td');
+  td.colSpan = 12;
+  td.innerHTML = `<div class="ai-panel" id="ai-panel-ipi-${i}"><div class="ai-loading"><div class="vc-spinner"></div><span>Analyzing with AI…</span></div></div>`;
+  pr.appendChild(td);
+  dataRow.after(pr);
+  if (btn) btn.querySelector('.btn-ai')?.classList.add('active');
+
+  const entry    = ipIntelResults[i];
+  const iocValue = entry?.ioc?.value;
+  const cached   = iocValue ? _aiCache.get(iocValue) : null;
+  if (cached) {
+    document.getElementById(`ai-panel-ipi-${i}`).innerHTML = renderAIResult(cached, `ipi${i}`, iocValue);
+    return;
+  }
+  await _runIPIntelAnalysis(i, `ai-panel-ipi-${i}`);
+}
+
+async function _runIPIntelAnalysis(entryIdx, panelId) {
+  const entry  = ipIntelResults[entryIdx];
+  const panel  = document.getElementById(panelId);
+  if (!entry || !panel) return;
+
+  const iocValue = entry.ioc.value;
+  const provId   = aiGetProv();
+  const key      = aiGetKey(provId);
+  const prov     = AI_PROVIDERS[provId];
+
+  if (!key) {
+    panel.innerHTML = `<div class="ai-error">No API key for <strong>${prov?.name || provId}</strong>. <button class="ai-link-btn" onclick="openAISettings()">Open AI Settings →</button></div>`;
+    return;
+  }
+
+  try {
+    const raw    = await callAI(provId, key, buildAIPrompt(entry));
+    const result = parseAIResponse(raw);
+    _aiCache.set(iocValue, result);
+    panel.innerHTML = renderAIResult(result, `ipi${entryIdx}`, iocValue);
+  } catch (e) {
+    panel.innerHTML = `<div class="ai-error"><span>Analysis failed: ${escapeHtml(e.message)}</span> <button class="ai-link-btn" onclick="rerunIPIntelAIPanel(${entryIdx})">Retry →</button></div>`;
+  }
+}
+
+async function rerunIPIntelAIPanel(entryIdx) {
+  const entry = ipIntelResults[entryIdx];
+  if (entry?.ioc?.value) _aiCache.clear();
+  const panel = document.getElementById(`ai-panel-ipi-${entryIdx}`);
+  if (panel) {
+    panel.innerHTML = `<div class="ai-loading"><div class="vc-spinner"></div><span>Re-analyzing…</span></div>`;
+    await _runIPIntelAnalysis(entryIdx, `ai-panel-ipi-${entryIdx}`);
   }
 }
 

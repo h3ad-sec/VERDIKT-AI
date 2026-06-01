@@ -835,6 +835,7 @@ function buildIPIntelRow(entry, i) {
 
   const copyHtml   = done ? `<button class="btn-ii-copy" onclick="copyIPIntelRow(${i})" title="Copy as key-value">⎘</button>` : '';
   const detailHtml = done ? `<button class="btn-detail" onclick="openIPIntelModal(${i})">DETAIL</button>` : ld;
+  const aiBtnHtml  = done ? `<button class="btn-ai" onclick="toggleIPIntelAIPanel(${i})" title="AI analysis">AI</button>` : '';
 
   return `<tr data-row="${i}">
     <td class="td-ioc">
@@ -853,6 +854,7 @@ function buildIPIntelRow(entry, i) {
     <td id="ii-fl-${i}"      class="col-iflags">${flagsHtml}</td>
     <td id="ii-copy-${i}"    class="col-icopy">${copyHtml}</td>
     <td id="ii-det-${i}"     class="col-idetail">${detailHtml}</td>
+    <td id="ii-ai-${i}"      class="col-ai">${aiBtnHtml}</td>
   </tr>`;
 }
 
@@ -922,6 +924,8 @@ function updateIPIntelRow(i, entry) {
 
   if (copyEl) copyEl.innerHTML = `<button class="btn-ii-copy" onclick="copyIPIntelRow(${i})" title="Copy as key-value">⎘</button>`;
   if (detEl)  detEl.innerHTML  = `<button class="btn-detail" onclick="openIPIntelModal(${i})">DETAIL</button>`;
+  const aiEl = document.getElementById(`ii-ai-${i}`);
+  if (aiEl) aiEl.innerHTML = `<button class="btn-ai" onclick="toggleIPIntelAIPanel(${i})" title="AI analysis">AI</button>`;
 }
 
 function openIPIntelModal(i) {
